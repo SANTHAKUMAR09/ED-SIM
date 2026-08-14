@@ -10,12 +10,24 @@ function R = AMD_Electrodialysis_MetalRecovery(feed_ov, stack_ov, make_plots)
 %% ╠══════════════════════════════════════════════════════════════════╣
 %% ║  MODEL (steady-state, algebraic — same style as Lime/Thickener): ║
 %% ║   I        = i_app * A_mem                    [A, per cell pair] ║
-%% ║   Ndot_i   = N_cp*eta_i*I/(z_i*F) * 3600       [mol/h transferred]║
+%% ║   eta_eff_i= eta_i * chelatorFactor*secFeedFactor*pHFactor(Ni/Co only) [chemistry proxy, see below] ║
+%% ║   Ndot_i   = N_cp*eta_eff_i*I/(z_i*F) * 3600   [mol/h transferred]║
 %% ║   C_i,dil_out = C_i,in - Ndot_i/Q_d            [diluate outlet]   ║
 %% ║   Q_c      sized so Ni hits CF_target          [concentrate flow] ║
 %% ║   C_i,conc_out = Ndot_i/Q_c                    [concentrate, fresh-water makeup] ║
 %% ║   i_lim_i  = z_i*F*D_i*C_i,dil_out/delta       [limiting current, worst-case outlet] ║
 %% ║   V_stack  = N_cp*(V_junction + i_app*R_area)  [stack voltage]    ║
+%% ╠══════════════════════════════════════════════════════════════════╣
+%% ║  CHEMISTRY PROXY (chelator / secondary feed / pH):                ║
+%% ║  This model still treats Ni2+/Co2+ as free cations through a CEM  ║
+%% ║  (see Presets/AMD_ED_Preset_Isaksson2025_Paper1.m header) — it does║
+%% ║  NOT simulate chelation equilibria or AEM anionic-complex transport║
+%% ║  mechanistically. p.chelator/p.secondary_feed/p.pH instead apply   ║
+%% ║  literature-informed, ASSUMPTION-FLAGGED multiplier factors onto   ║
+%% ║  eta_Ni/eta_Co, calibrated to factor=1.0 at Isaksson et al.'s exact║
+%% ║  recipe (EDTA, Na2SO4, pH~7). Treat swept results as illustrative  ║
+%% ║  sensitivity, not a validated quantitative correlation — see       ║
+%% ║  chelatorFactor_ED/secondaryFeedFactor_ED/pHFactor_ED for sources. ║
 %% ╚══════════════════════════════════════════════════════════════════╝
 
 fprintf('\n╔══════════════════════════════════════════════════════════════════╗\n');
@@ -102,6 +114,11 @@ p.V_junct  = 0.4;      % V  membrane potential + electrode overpotential, per ce
 p.CF_target = 8;       % -  target concentration factor for Ni in the concentrate loop
 p.i_margin  = 0.8;     % -  design margin vs limiting current density (avoid water splitting)
 
+%── Chemistry proxy inputs — see file-header CHEMISTRY PROXY note ────────
+p.chelator       = 'EDTA';    % 'EDTA' | 'HEDTA' | 'DTPA' | 'GLDA' | 'none'
+p.secondary_feed = 'Na2SO4';  % 'Na2SO4' | 'H2SO4'
+p.pH             = 7;         % feed pH, dimensionless
+
 if ~isempty(stack_ov)
     f = fieldnames(stack_ov);
     for k = 1:numel(f); p.(f{k}) = stack_ov.(f{k}); end
@@ -110,6 +127,15 @@ end
 %── Derived: total stack current (series circuit — same I through every cell pair) ─
 p.I = p.i_app * p.A_mem;   % A
 
+%── Chemistry proxy factors -> effective (chemistry-adjusted) Ni/Co efficiency ──
+p.chem.chelatorFactor  = chelatorFactor_ED(p.chelator);
+p.chem.secFeedFactor   = secondaryFeedFactor_ED(p.secondary_feed);
+p.chem.pHFactor        = pHFactor_ED(p.pH);
+p.chem.combinedFactor  = p.chem.chelatorFactor * p.chem.secFeedFactor * p.chem.pHFactor;
+p.eta_eff.Ni  = p.eta.Ni  * p.chem.combinedFactor;
+p.eta_eff.Co  = p.eta.Co  * p.chem.combinedFactor;
+p.eta_eff.SO4 = p.eta.SO4;   % SO4 (AEM/counter-ion side) not adjusted -- see header
+
 %── Design summary ────────────────────────────────────────────────────────
 fprintf('══════════════════════════════════════════════\n');
 fprintf('  Electrodialysis Stack — Design\n');
@@ -117,11 +143,65 @@ fprintf('═══════════════════════�
 fprintf('  Cell pairs N_cp    : %d\n', p.N_cp);
 fprintf('  Membrane area/pair : %.3f m^2  (total %.1f m^2)\n', p.A_mem, p.N_cp*p.A_mem*2);
 fprintf('  Applied i_app      : %.0f A/m^2  ->  I = %.2f A\n', p.i_app, p.I);
-fprintf('  Current efficiency : Ni %.0f%%  Co %.0f%%  SO4 %.0f%%\n', ...
-    p.eta.Ni*100, p.eta.Co*100, p.eta.SO4*100);
+fprintf('  Chemistry (proxy)  : chelator=%s (x%.2f)  secondary feed=%s (x%.2f)  pH=%.1f (x%.2f)\n', ...
+    p.chelator, p.chem.chelatorFactor, p.secondary_feed, p.chem.secFeedFactor, p.pH, p.chem.pHFactor);
+fprintf('  Current efficiency : Ni %.0f%% -> eff %.0f%%   Co %.0f%% -> eff %.0f%%   SO4 %.0f%%\n', ...
+    p.eta.Ni*100, p.eta_eff.Ni*100, p.eta.Co*100, p.eta_eff.Co*100, p.eta_eff.SO4*100);
 fprintf('  Target CF (Ni)     : %.1fx\n', p.CF_target);
 fprintf('══════════════════════════════════════════════\n\n');
 
+end
+
+
+%% ═══════════════════════════════════════════════════════════════════════
+%%  CHEMISTRY PROXY FACTORS — chelator / secondary feed / pH
+%%  ASSUMPTION-FLAGGED multipliers on eta_Ni/eta_Co (see file header). All
+%%  factors = 1.0 at Isaksson et al. 2025's exact recipe (EDTA, Na2SO4,
+%%  pH~7) so the default run is unchanged from before this feature existed.
+%% ═══════════════════════════════════════════════════════════════════════
+function factor = chelatorFactor_ED(chelator)
+% Isaksson et al. 2025 used EDTA (+ Na2SO4) to reach 97.9%/96.6% Ni/Co
+% separation -- taken as baseline (1.00). Xing & Srinivasan 2023 (Table 1,
+% LCO leachate) found DTPA > HEDTA > GLDA > EDTA for THEIR target ion (Li)
+% under bipolar-membrane ED, a different mechanism/target metal; the
+% relative ordering is carried over here only as a qualitative proxy for
+% "how readily this chelator supports metal-complex transport", NOT a
+% validated Ni/Co number for any agent besides EDTA. 'none' (no chelator)
+% has no reported EDM/BMED Ni-Co result in either paper we reviewed --
+% treated as a substantial illustrative penalty.
+switch chelator
+    case 'EDTA';  factor = 1.00;   % literature-anchored (Isaksson et al. 2025)
+    case 'DTPA';  factor = 0.90;   % ASSUMPTION, proxy from Xing & Srinivasan Table 1 ordering
+    case 'HEDTA'; factor = 0.80;   % ASSUMPTION, proxy
+    case 'GLDA';  factor = 0.75;   % ASSUMPTION, proxy
+    case 'none';  factor = 0.20;   % ASSUMPTION, illustrative penalty -- no reported EDM data
+    otherwise
+        error('AMD_ED:chelator', 'Unknown p.chelator "%s" (expected EDTA/DTPA/HEDTA/GLDA/none)', chelator);
+end
+end
+
+function factor = secondaryFeedFactor_ED(secondary_feed)
+% Isaksson et al. 2025 report that Na2SO4 (vs. H2SO4) mitigates membrane
+% fouling from EDTA precipitation in the acidic H2SO4 secondary feed --
+% baseline Na2SO4 = 1.00; H2SO4 penalty is an ILLUSTRATIVE proxy for that
+% qualitative fouling effect, not a measured efficiency loss.
+switch secondary_feed
+    case 'Na2SO4'; factor = 1.00;  % literature-anchored (fouling-mitigating choice)
+    case 'H2SO4';  factor = 0.75;  % ASSUMPTION, illustrative fouling penalty
+    otherwise
+        error('AMD_ED:secondary_feed', 'Unknown p.secondary_feed "%s" (expected Na2SO4/H2SO4)', secondary_feed);
+end
+end
+
+function factor = pHFactor_ED(pH)
+% ASSUMPTION: EDTA-metal chelate stability (and thus effective transport)
+% is strongest near neutral pH -- Xing & Srinivasan's protocol adjusts
+% leachate to pH 7 before electrodialysis. Modeled as a Gaussian centered
+% at pH0=7 or width sigma=3 (illustrative shape, not fit to a reported
+% pH-sweep dataset for Ni/Co specifically -- neither paper we reviewed ran
+% one). factor=1.0 exactly at pH 7.
+pH0 = 7; sigma = 3;
+factor = exp(-0.5*((pH-pH0)/sigma)^2);
 end
 
 
@@ -130,10 +210,13 @@ end
 %% ═══════════════════════════════════════════════════════════════════════
 function R = runED(p)
 
-%% Faraday's-law molar transfer rates (mol/h), summed over N_cp cell pairs
-R.Ndot.Ni  = p.N_cp * p.eta.Ni  * p.I / (p.z.Ni  * p.F) * 3600;
-R.Ndot.Co  = p.N_cp * p.eta.Co  * p.I / (p.z.Co  * p.F) * 3600;
-R.Ndot.SO4 = p.N_cp * p.eta.SO4 * p.I / (p.z.SO4 * p.F) * 3600;
+%% Faraday's-law molar transfer rates (mol/h), summed over N_cp cell pairs.
+%% Ni/Co use the chemistry-adjusted eta_eff (chelator/secondary-feed/pH
+%% proxy factors, see file header + chelatorFactor_ED/secondaryFeedFactor_ED/
+%% pHFactor_ED); SO4 uses the raw AEM-side eta (unadjusted).
+R.Ndot.Ni  = p.N_cp * p.eta_eff.Ni  * p.I / (p.z.Ni  * p.F) * 3600;
+R.Ndot.Co  = p.N_cp * p.eta_eff.Co  * p.I / (p.z.Co  * p.F) * 3600;
+R.Ndot.SO4 = p.N_cp * p.eta_eff.SO4 * p.I / (p.z.SO4 * p.F) * 3600;
 
 %% Diluate outlet (steady-state mass balance, single pass)
 R.dil.Ni  = max(p.in.Ni  - R.Ndot.Ni /p.in.Q, 0);
