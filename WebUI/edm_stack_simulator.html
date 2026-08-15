@@ -31,11 +31,11 @@
 }
 
 :root{
-  /* neutrals — cool blue-grey, instrument-panel character */
-  --bg: #eef1f6;
+  /* neutrals — white ground, cool blue-grey for structure */
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #e4e9f0;
-  --border: #c9d2df;
+  --surface-2: #f1f4f8;
+  --border: #d7dee8;
   --text: #17202b;
   --text-muted: #5b6b7f;
   --text-faint: #8493a6;
@@ -77,68 +77,10 @@
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg: #0c121b;
-    --surface: #131b27;
-    --surface-2: #1a2432;
-    --border: #2a3646;
-    --text: #e8edf4;
-    --text-muted: #93a3b8;
-    --text-faint: #64748b;
-    --accent: #818cf8;
-    --accent-hover: #a5b4fc;
-    --accent-contrast: #0c121b;
-    --good: #34d399;
-    --warn: #fbbf24;
-    --crit: #fb7185;
-    --c-cathode: #a78bfa;
-    --c-d2: #d99a3d;
-    --c-c2: #34d399;
-    --c-d1: #60a5fa;
-    --c-c1: #4ade80;
-    --c-anode: #f472b6;
-    --m-cem: #fb923c;
-    --m-aem: #2dd4bf;
-    --s-co: #38bdf8;
-    --s-ca: #94a3b8;
-    --s-na: #4ade80;
-    --s-so4: #a78bfa;
-    --s-cl: #22d3ee;
-    --s-h: #fb7185;
-    --s-oh: #60a5fa;
-  }
-}
-:root[data-theme="dark"]{
-  --bg: #0c121b;
-  --surface: #131b27;
-  --surface-2: #1a2432;
-  --border: #2a3646;
-  --text: #e8edf4;
-  --text-muted: #93a3b8;
-  --text-faint: #64748b;
-  --accent: #818cf8;
-  --accent-hover: #a5b4fc;
-  --accent-contrast: #0c121b;
-  --good: #34d399;
-  --warn: #fbbf24;
-  --crit: #fb7185;
-  --c-cathode: #a78bfa;
-  --c-d2: #d99a3d;
-  --c-c2: #34d399;
-  --c-d1: #60a5fa;
-  --c-c1: #4ade80;
-  --c-anode: #f472b6;
-  --m-cem: #fb923c;
-  --m-aem: #2dd4bf;
-  --s-co: #38bdf8;
-  --s-ca: #94a3b8;
-  --s-na: #4ade80;
-  --s-so4: #a78bfa;
-  --s-cl: #22d3ee;
-  --s-h: #fb7185;
-  --s-oh: #60a5fa;
-}
+/* Deliberately single-theme (white ground) per explicit request -- no
+   prefers-color-scheme / data-theme dark overrides. All colors below are
+   painted explicitly against a white surface regardless of the viewer's
+   OS theme setting. */
 
 *{ box-sizing: border-box; }
 html,body{ margin:0; padding:0; }
@@ -203,6 +145,7 @@ input, select, button{
 .card{
   background: var(--surface); border:1px solid var(--border); border-radius: 10px;
   padding: 15px 16px;
+  box-shadow: 0 1px 2px rgba(23,32,43,0.04), 0 1px 8px rgba(23,32,43,0.03);
 }
 .card + .card{ margin-top: 14px; }
 .card h3{
@@ -248,6 +191,7 @@ input, select, button{
 .kpi{
   background: var(--surface); border:1px solid var(--border); border-radius:10px;
   padding: 12px 14px;
+  box-shadow: 0 1px 2px rgba(23,32,43,0.04), 0 1px 8px rgba(23,32,43,0.03);
 }
 .kpi .k-label{ font-size: 10.5px; color: var(--text-muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; }
 .kpi .k-value{ font-family: var(--font-mono); font-size: 21px; font-weight:600; font-variant-numeric: tabular-nums; }
@@ -698,12 +642,6 @@ function colorVar(cssVar){
   const resolved = getComputedStyle(tmp).color; document.body.removeChild(tmp);
   colorVarCache.set(cssVar, resolved);
   return resolved;
-}
-if(window.matchMedia){
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{
-    colorVarCache.clear();
-    if(state){ renderSchematic(state); renderCharts(); }
-  });
 }
 
 /* ═══════════════════════════════════════════════════════════════
