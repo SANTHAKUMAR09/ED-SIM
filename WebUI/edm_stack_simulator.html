@@ -242,6 +242,31 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
 
 .footer-note{ max-width:1500px; margin: 6px auto 0; padding: 0 22px 26px; font-size:11px; color:var(--text-faint); line-height:1.6; }
 .footer-note b{ color: var(--text-muted); }
+
+.eq-section{ max-width:1500px; margin: 30px auto 0; padding: 0 22px 40px; }
+.eq-section h2{
+  font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-muted); font-weight: 600; margin-bottom: 4px; font-family: var(--font-ui);
+}
+.eq-section .eq-intro{ font-size: 12px; color: var(--text-faint); margin-bottom: 18px; max-width: 70ch; line-height: 1.6; }
+.eq-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+.eq-card{
+  background: var(--surface); border:1px solid var(--border); border-radius: 10px;
+  padding: 16px 18px; box-shadow: 0 1px 2px rgba(23,32,43,0.04), 0 1px 8px rgba(23,32,43,0.03);
+}
+.eq-card .eq-label{ font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); font-weight: 600; margin-bottom: 8px; }
+.eq-card .eq-formula{
+  font-family: var(--font-mono); font-size: 15px; color: var(--text);
+  background: var(--surface-2); border-radius: 6px; padding: 10px 12px; margin-bottom: 10px;
+  overflow-x: auto; white-space: nowrap;
+}
+.eq-card .eq-desc{ font-size: 12px; color: var(--text-muted); line-height: 1.55; }
+.eq-card .eq-desc code{ font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; color: var(--text); }
+.eq-legend{
+  margin-top: 18px; display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap: 6px 24px; font-size: 11.5px; color: var(--text-muted);
+}
+.eq-legend .term{ font-family: var(--font-mono); color: var(--text); font-weight:600; }
 </style>
 
 <div class="app">
@@ -332,6 +357,61 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="eq-section">
+    <h2>Model equations</h2>
+    <p class="eq-intro">The six equations the simulator actually steps forward each timestep, in the order they're applied: how much of each ion moves, which ion wins the competition at a shared membrane, how concentrations update, and how voltage / pH are derived from the result.</p>
+
+    <div class="eq-grid">
+      <div class="eq-card">
+        <div class="eq-label">1 · Transport-number share</div>
+        <div class="eq-formula">η<sub>i</sub> = (|z<sub>i</sub>| · λ<sub>i</sub> · C<sub>i</sub>) / Σ<sub>j</sub>(|z<sub>j</sub>| · λ<sub>j</sub> · C<sub>j</sub>)</div>
+        <div class="eq-desc">At a given membrane, every same-sign ion present in the source compartment competes for the current in proportion to its ionic conductance (charge × mobility × concentration). This is Kohlrausch's law applied per-membrane — <code>η</code> is recomputed every timestep as concentrations shift, not a fixed efficiency constant. The sum of <code>η</code> over all competing ions is always exactly 1.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">2 · Faraday's-law flux</div>
+        <div class="eq-formula">J<sub>i</sub> = η<sub>i</sub> · I / (|z<sub>i</sub>| · F)</div>
+        <div class="eq-desc">The molar flux of species <code>i</code> across that membrane. A 2+ ion (Co²⁺, Ca²⁺, SO4²⁻) needs twice the charge to move the same mole count as a 1+ ion (Na⁺, H⁺, Cl⁻) — that's the <code>|z<sub>i</sub>|</code> in the denominator.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">3 · Compartment mass balance</div>
+        <div class="eq-formula">ΔC<sub>i</sub> = (J<sub>in</sub> − J<sub>out</sub>) · Δt / V<sub>compartment</sub></div>
+        <div class="eq-desc">Each of the 6 loops is a well-mixed batch volume with no continuous feed/bleed — flux in one side, flux out the other, converted to a concentration change over the timestep. Flux is capped at what's actually available in the source that step, so a species can't go negative or create mass out of nowhere when it fully depletes mid-step.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">4 · Electrode reactions</div>
+        <div class="eq-formula">d[OH⁻]/dt |<sub>cathode</sub> = I/F &nbsp;&nbsp;·&nbsp;&nbsp; d[H⁺]/dt |<sub>anode</sub> = I/F</div>
+        <div class="eq-desc">Water-splitting at the two electrode surfaces: 2H<sub>2</sub>O + 2e⁻ → H<sub>2</sub> + 2OH⁻ at the cathode, 2H<sub>2</sub>O → O<sub>2</sub> + 4H⁺ + 4e⁻ at the anode. These are Faradaic source terms layered on top of the membrane transport above, at rate <code>I/F</code> (one electron per OH⁻ or H⁺).</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">5 · Conductivity &amp; stack voltage</div>
+        <div class="eq-formula">κ = 0.001·Σ<sub>i</sub>(λ<sub>i</sub>·|z<sub>i</sub>|·C<sub>i</sub>) &nbsp;·&nbsp; V = I·(ΣR<sub>compartment</sub> + ΣR<sub>membrane</sub>) + V<sub>overpotential</sub></div>
+        <div class="eq-desc">Each compartment's ionic conductivity <code>κ</code> comes from the same <code>λ</code>/<code>z</code>/<code>C</code> values as the transport-number calc. Resistance is <code>gap/(κ·A)</code> per compartment plus a fixed areal resistance per membrane; a depleted compartment is floored at pure water's own conductivity (not zero) so voltage rises steeply but doesn't spike to infinity or drop back to a false near-zero reading. The result is also capped at a documented ceiling once a compartment nears full depletion — see the warning on the Voltage &amp; current chart.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">6 · pH</div>
+        <div class="eq-formula">pH = −log<sub>10</sub>(C<sub>H,eff</sub>) &nbsp;&nbsp;where&nbsp;&nbsp; C<sub>H,eff</sub> = C<sub>H</sub> − C<sub>OH</sub>, or K<sub>w</sub>/(C<sub>OH</sub> − C<sub>H</sub>)</div>
+        <div class="eq-desc">H⁺ and OH⁻ are tracked like any other migrating species (plus the electrode source terms above), then reconciled through the water equilibrium constant <code>K<sub>w</sub> = 10⁻¹⁴</code> for display. A compartment with no net H⁺/OH⁻ signal at all falls back to neutral (pH 7) rather than the misleading pH 0 a naive formula would give.</div>
+      </div>
+    </div>
+
+    <div class="eq-legend">
+      <div><span class="term">I</span> — applied current (A, constant)</div>
+      <div><span class="term">F</span> — Faraday constant, 96 485 C/mol</div>
+      <div><span class="term">z<sub>i</sub></span> — charge number of species <code>i</code> (see z=± labels above)</div>
+      <div><span class="term">λ<sub>i</sub></span> — limiting equivalent ionic conductivity (S·cm²/eq)</div>
+      <div><span class="term">C<sub>i</sub></span> — molar concentration of species <code>i</code> (mol/L)</div>
+      <div><span class="term">η<sub>i</sub></span> — transport-number share of species <code>i</code> at a membrane</div>
+      <div><span class="term">κ</span> — ionic conductivity of a compartment (S/cm)</div>
+      <div><span class="term">V</span> (context-dependent) — either stack voltage or compartment volume</div>
+      <div><span class="term">K<sub>w</sub></span> — water ion product, 10⁻¹⁴ at 25°C</div>
     </div>
   </div>
 
