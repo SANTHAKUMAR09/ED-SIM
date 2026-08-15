@@ -327,6 +327,7 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
           <button class="chart-tab" data-tab="balance">Mass balance</button>
           <button class="chart-tab" data-tab="voltage">Voltage &amp; current</button>
           <button class="chart-tab" data-tab="ph">pH</button>
+          <button class="chart-tab" data-tab="efficiency">Current efficiency</button>
           <button class="chart-tab" data-tab="table">Snapshot table</button>
         </div>
 
@@ -346,6 +347,10 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
           <canvas id="chartPh" height="260"></canvas>
           <div class="legend" id="legendPh"></div>
         </div>
+        <div class="chart-panel" data-panel="efficiency">
+          <canvas id="chartEfficiency" height="260"></canvas>
+          <div class="legend" id="legendEfficiency"></div>
+        </div>
         <div class="chart-panel" data-panel="table">
           <div class="time-scrub">
             <span class="hint" style="margin:0">t =</span>
@@ -362,7 +367,7 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
 
   <div class="eq-section">
     <h2>Model equations</h2>
-    <p class="eq-intro">The six equations the simulator actually steps forward each timestep, in the order they're applied: how much of each ion moves, which ion wins the competition at a shared membrane, how concentrations update, and how voltage / pH are derived from the result.</p>
+    <p class="eq-intro">The seven equations the simulator runs: how much of each ion moves each timestep, which ion wins the competition at a shared membrane, how concentrations update, how voltage / pH are derived from the result, and how the Co²⁺ current-efficiency curve is built from that same history.</p>
 
     <div class="eq-grid">
       <div class="eq-card">
@@ -400,14 +405,22 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
         <div class="eq-formula">pH = −log<sub>10</sub>(C<sub>H,eff</sub>) &nbsp;&nbsp;where&nbsp;&nbsp; C<sub>H,eff</sub> = C<sub>H</sub> − C<sub>OH</sub>, or K<sub>w</sub>/(C<sub>OH</sub> − C<sub>H</sub>)</div>
         <div class="eq-desc">H⁺ and OH⁻ are tracked like any other migrating species (plus the electrode source terms above), then reconciled through the water equilibrium constant <code>K<sub>w</sub> = 10⁻¹⁴</code> for display. A compartment with no net H⁺/OH⁻ signal at all falls back to neutral (pH 7) rather than the misleading pH 0 a naive formula would give.</div>
       </div>
+
+      <div class="eq-card">
+        <div class="eq-label">7 · Current efficiency vs. time (Co²⁺)</div>
+        <div class="eq-formula">η<sub>Co</sub>(t) = min( n<sub>Co,C2</sub>(t) / (I·t / (z<sub>Co</sub>·F)), 1 ) × 100%</div>
+        <div class="eq-desc">Plotted on the <code>Current efficiency</code> tab. This is <em>cumulative</em>, not instantaneous: <code>n<sub>Co,C2</sub>(t)</code> is the actual moles of Co²⁺ accumulated in C2 by time <code>t</code>, and <code>I·t/(z<sub>Co</sub>·F)</code> is the theoretical maximum moles transferable if <em>every</em> electron passed so far had gone to Co²⁺ alone. It reads low early on because Ca²⁺ and Na⁺ are still competing at membrane 3 (eq. 1) — the same shared-current competition, just viewed as a running average instead of an instantaneous rate. The KPI card shows this curve's endpoint at the current run time.</div>
+      </div>
     </div>
 
     <div class="eq-legend">
       <div><span class="term">I</span> — applied current (A, constant)</div>
       <div><span class="term">F</span> — Faraday constant, 96 485 C/mol</div>
+      <div><span class="term">t</span> — elapsed simulated time (s)</div>
       <div><span class="term">z<sub>i</sub></span> — charge number of species <code>i</code> (see z=± labels above)</div>
       <div><span class="term">λ<sub>i</sub></span> — limiting equivalent ionic conductivity (S·cm²/eq)</div>
       <div><span class="term">C<sub>i</sub></span> — molar concentration of species <code>i</code> (mol/L)</div>
+      <div><span class="term">n<sub>Co,C2</sub></span> — moles of Co²⁺ accumulated in compartment C2</div>
       <div><span class="term">η<sub>i</sub></span> — transport-number share of species <code>i</code> at a membrane</div>
       <div><span class="term">κ</span> — ionic conductivity of a compartment (S/cm)</div>
       <div><span class="term">V</span> (context-dependent) — either stack voltage or compartment volume</div>
@@ -630,6 +643,17 @@ function phOf(conc){
     cHeff = 1e-7;
   }
   return -Math.log10(Math.max(cHeff,1e-14));
+}
+
+// Cumulative Co2+ current efficiency up to a given history snapshot: how
+// much of the charge passed so far actually ended up moving Co2+ into C2,
+// vs. the theoretical maximum if 100% of that charge had gone to Co2+ alone.
+// A single shared function so the KPI card and the time-series chart can
+// never drift out of sync with each other.
+function coCurrentEfficiencyAt(h, I){
+  const coInC2 = h.conc['c2']['Co'] * getVolumeFor('c2');
+  const theoreticalMaxMol = (I * h.t) / (SP.Co.z * F);
+  return theoreticalMaxMol > 1e-12 ? Math.min(coInC2/theoreticalMaxMol*100, 100) : 0;
 }
 
 function snapshot(st){
@@ -883,14 +907,15 @@ function drawLineChart(canvas, series, opts){
   }
 }
 function fmtAxis(v, fmt){
-  if(fmt==='pct') return (v*100).toFixed(0)+'%';
+  if(fmt==='pct') return (v*100).toFixed(0)+'%';        // input is a 0..1 fraction
+  if(fmt==='pct01') return v.toFixed(0)+'%';             // input is already 0..100
   if(fmt==='ph') return v.toFixed(1);
   if(fmt==='v') return v.toFixed(1)+'V';
   if(Math.abs(v) < 0.001 && v!==0) return v.toExponential(1);
   return v.toFixed(3);
 }
 
-const hiddenSeries = { conc:new Set(), balance:new Set(), voltage:new Set(), ph:new Set() };
+const hiddenSeries = { conc:new Set(), balance:new Set(), voltage:new Set(), ph:new Set(), efficiency:new Set() };
 
 function buildLegend(el, items, groupKey){
   el.innerHTML='';
@@ -979,6 +1004,19 @@ function renderCharts(){
   drawLineChart(document.getElementById('chartPh'), seriesPh, {yFmt:'ph', yMin:0, yMax:14, cssHeight:260});
   buildLegend(document.getElementById('legendPh'), COMPT_DEFS.map(def=>({key:def.id,label:shortLabel(def),color:colorVar(def.color)})), 'ph');
 
+  // Current efficiency vs. time chart -- cumulative, not instantaneous: see
+  // eq. 7 in the Model Equations section for the formula and why cumulative
+  // (a running-average metric) is the right framing here rather than a
+  // per-timestep rate, which would be noisy and harder to act on.
+  const seriesEff = [{
+    key:'Co', color: colorVar('var(--s-co)'), hidden: hiddenSeries.efficiency.has('Co'),
+    points: hist.map(h=>({x:h.t/60, y: coCurrentEfficiencyAt(h, state.I)}))
+  }];
+  drawLineChart(document.getElementById('chartEfficiency'), seriesEff, {yFmt:'pct01', yMin:0, yMax:100, cssHeight:260});
+  buildLegend(document.getElementById('legendEfficiency'), [
+    {key:'Co', label:'Co²⁺ current efficiency, cumulative (%)', color: colorVar('var(--s-co)')},
+  ], 'efficiency');
+
   renderSnapshotTable();
   renderKpis();
 }
@@ -1047,9 +1085,10 @@ function renderKpis(){
   const cathodeNaGain = (last.conc['cathode']['Na'] - COMPT_DEFS[0].conc.Na) * getVolumeFor('cathode') * 1000;
   addKpi(strip, 'Cathode Na⁺ gained', cathodeNaGain.toFixed(2)+' mmol', '', 'sacrificial, by design');
 
-  // current efficiency for Co (based on cumulative Co transferred vs theoretical max)
-  const theoreticalMaxMol = (state.I * last.t) / (2*F);
-  const coEff = theoreticalMaxMol>1e-12 ? Math.min(coInC2/theoreticalMaxMol*100,100) : 0;
+  // current efficiency for Co (cumulative Co transferred vs theoretical max) --
+  // shares coCurrentEfficiencyAt() with the "Current efficiency" chart tab so
+  // this number and that curve's endpoint can never drift apart.
+  const coEff = coCurrentEfficiencyAt(last, state.I);
   addKpi(strip, 'Current efficiency, Co²⁺', coEff.toFixed(1)+'%', '', 'share of D1→C2 cation current');
 }
 function addKpi(strip, label, value, cls, sub){
