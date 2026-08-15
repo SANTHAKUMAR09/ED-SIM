@@ -367,7 +367,7 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
 
   <div class="eq-section">
     <h2>Model equations</h2>
-    <p class="eq-intro">The seven equations the simulator runs: how much of each ion moves each timestep, which ion wins the competition at a shared membrane, how concentrations update, how voltage / pH are derived from the result, and how the Co²⁺ current-efficiency curve is built from that same history.</p>
+    <p class="eq-intro">The eight equations the simulator runs: how much of each ion moves each timestep, which ion wins the competition at a shared membrane, how concentrations update, how voltage / pH are derived from the result, how the Co²⁺ current-efficiency curve is built from that same history, and — the one that actually caps real-world voltage — what happens once a membrane runs out of ions to carry the applied current.</p>
 
     <div class="eq-grid">
       <div class="eq-card">
@@ -396,8 +396,8 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
 
       <div class="eq-card">
         <div class="eq-label">5 · Conductivity &amp; stack voltage</div>
-        <div class="eq-formula">κ = 0.001·Σ<sub>i</sub>(λ<sub>i</sub>·|z<sub>i</sub>|·C<sub>i</sub>) &nbsp;·&nbsp; V = I·(ΣR<sub>compartment</sub> + ΣR<sub>membrane</sub>) + V<sub>overpotential</sub></div>
-        <div class="eq-desc">Each compartment's ionic conductivity <code>κ</code> comes from the same <code>λ</code>/<code>z</code>/<code>C</code> values as the transport-number calc. Resistance is <code>gap/(κ·A)</code> per compartment plus a fixed areal resistance per membrane; a depleted compartment is floored at pure water's own conductivity (not zero) so voltage rises steeply but doesn't spike to infinity or drop back to a false near-zero reading. The result is also capped at a documented ceiling once a compartment nears full depletion — see the warning on the Voltage &amp; current chart.</div>
+        <div class="eq-formula">κ = 0.001·Σ<sub>i</sub>(λ<sub>i</sub>·|z<sub>i</sub>|·C<sub>i</sub>) &nbsp;·&nbsp; V = I·(ΣR<sub>compartment</sub> + ΣR<sub>membrane</sub>) + V<sub>overpotential</sub> + V<sub>watersplit</sub></div>
+        <div class="eq-desc">Each compartment's ionic conductivity <code>κ</code> comes from the same <code>λ</code>/<code>z</code>/<code>C</code> values as the transport-number calc. Resistance is <code>gap/(κ·A)</code> per compartment plus a fixed areal resistance per membrane; a depleted compartment is floored at pure water's own conductivity (not zero) so voltage rises steeply but doesn't spike to infinity. <code>V<sub>watersplit</sub></code> (eq. 8) is what actually bends the curve into a plateau once a membrane goes over-limiting — the old hardcoded ceiling below is now just a safety net, not the mechanism.</div>
       </div>
 
       <div class="eq-card">
@@ -410,6 +410,12 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
         <div class="eq-label">7 · Current efficiency vs. time (Co²⁺)</div>
         <div class="eq-formula">η<sub>Co</sub>(t) = min( n<sub>Co,C2</sub>(t) / (I·t / (z<sub>Co</sub>·F)), 1 ) × 100%</div>
         <div class="eq-desc">Plotted on the <code>Current efficiency</code> tab. This is <em>cumulative</em>, not instantaneous: <code>n<sub>Co,C2</sub>(t)</code> is the actual moles of Co²⁺ accumulated in C2 by time <code>t</code>, and <code>I·t/(z<sub>Co</sub>·F)</code> is the theoretical maximum moles transferable if <em>every</em> electron passed so far had gone to Co²⁺ alone. It reads low early on because Ca²⁺ and Na⁺ are still competing at membrane 3 (eq. 1) — the same shared-current competition, just viewed as a running average instead of an instantaneous rate. The KPI card shows this curve's endpoint at the current run time.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">8 · Limiting current &amp; water-splitting</div>
+        <div class="eq-formula">I<sub>lim</sub> = A·Σ<sub>i</sub>(|z<sub>i</sub>|·F·D<sub>i</sub>·C<sub>i</sub>/(1000·δ)) &nbsp;&nbsp;·&nbsp;&nbsp; D<sub>i</sub> = R·T·λ<sub>i</sub> / (|z<sub>i</sub>|·F²)</div>
+        <div class="eq-desc">This is why your bench run plateaued around 10&nbsp;V instead of climbing indefinitely. Each membrane can only sustain <code>I<sub>lim</sub></code> — the Nernst diffusion-limited current set by how fast its own competing ions can reach the surface — via normal migration (eq. 1–2). Once the applied current <code>I</code> exceeds that, the shortfall <code>I − I<sub>lim</sub></code> is carried instead by water dissociating right at the membrane: for a CEM, the H⁺ produced crosses through (OH⁻ stays behind); for an AEM, OH⁻ crosses through (H⁺ stays behind). This is a real, well-known ED phenomenon ("over-limiting current") — not a numerical patch — and it's what produces <code>V<sub>watersplit</sub></code> in eq. 5: a roughly-constant added voltage per over-limiting membrane, giving the characteristic knee-then-plateau shape instead of an unbounded climb. <code>D<sub>i</sub></code> isn't a separate fitted parameter — it's derived from the same <code>λ<sub>i</sub></code> already in eq. 1 via the Nernst-Einstein relation (verified against literature: this gives D<sub>Na⁺</sub>=1.33×10⁻⁵ and D<sub>Ca²⁺</sub>=7.92×10⁻⁶ cm²/s, matching tabulated values to 3 significant figures). <code>δ</code> (boundary layer thickness) is the one genuinely placeholder value here.</div>
       </div>
     </div>
 
@@ -425,13 +431,17 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
       <div><span class="term">κ</span> — ionic conductivity of a compartment (S/cm)</div>
       <div><span class="term">V</span> (context-dependent) — either stack voltage or compartment volume</div>
       <div><span class="term">K<sub>w</sub></span> — water ion product, 10⁻¹⁴ at 25°C</div>
+      <div><span class="term">I<sub>lim</sub></span> — diffusion-limited current a membrane can sustain via migration</div>
+      <div><span class="term">D<sub>i</sub></span> — diffusivity of species <code>i</code> (cm²/s), derived from λ<sub>i</sub></div>
+      <div><span class="term">δ</span> — Nernst diffusion boundary layer thickness (cm)</div>
+      <div><span class="term">R, T</span> — gas constant (8.314 J/mol/K), temperature (298.15 K)</div>
     </div>
   </div>
 
   <div class="footer-note">
     <b>Model scope:</b> closed-loop batch simulation, single quad (N=1), corrected termination (both end membranes CEM — D2 at the cathode end, C1 at the anode end) to keep metal cations out of the cathode rinse and Cl⁻ out of the anode rinse.
     Ion transport at each membrane is split between competing same-sign species by a conductivity-weighted share (Kohlrausch's law, standard limiting molar conductivities) — not a fixed efficiency constant. Electrode reactions (H2/OH⁻ at the cathode rinse, O2/H+ at the anode rinse) are modeled as Faradaic source terms.
-    Voltage is derived from a simplified compartment + membrane resistance chain (spacer gap 0.5&nbsp;cm, membrane areal resistance 5&nbsp;Ω·cm² each, fixed 1.5&nbsp;V electrode overpotential) — all flagged placeholders, not measured values. pH is a simplified proxy (H⁺/OH⁻ tracked as trace migrating species plus electrode generation, water-equilibrium clamp for display) — not a rigorous aqueous-equilibrium solver.
+    Voltage is derived from a simplified compartment + membrane resistance chain (spacer gap 0.5&nbsp;cm, membrane areal resistance 5&nbsp;Ω·cm² each, fixed 1.5&nbsp;V electrode overpotential) plus an over-limiting-current / water-splitting term at interior membranes once a membrane's own ion supply can't sustain the applied current (Nernst diffusion-limited current, 50&nbsp;µm boundary layer, 0.8&nbsp;V per over-limiting membrane) — this is what produces a realistic voltage knee-then-plateau instead of an unbounded climb; see eq. 8. Resistance/overpotential magnitudes are flagged placeholders, not measured values. pH is a simplified proxy (H⁺/OH⁻ tracked as trace migrating species plus electrode and over-limiting generation, water-equilibrium clamp for display) — not a rigorous aqueous-equilibrium solver.
   </div>
 </div>
 
@@ -444,12 +454,21 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
    ═══════════════════════════════════════════════════════════════ */
 const F = 96485;      // C/mol
 const Kw = 1e-14;      // water ion product, 25°C
+const R_GAS = 8.314;   // J/mol/K
+const T_KELVIN = 298.15; // 25°C -- matches the 25°C literature lambda values below
 
 /* ═══════════════════════════════════════════════════════════════
    SPECIES — id, label, charge z, limiting equivalent ionic
    conductivity λ° (S·cm²/eq, 25°C, standard literature values).
    Transport-number share at a membrane ∝ |z_i| · λ_i · C_i, i.e.
    Kohlrausch's law applied per-membrane to same-sign competitors.
+
+   D (diffusivity, cm²/s) is DERIVED from λ via the Nernst-Einstein
+   relation, D_i = R·T·λ_i / (|z_i|·F²) -- not a second independent
+   parameter. Verified against literature: this gives D_Na+ = 1.33e-5
+   cm²/s and D_Ca2+ = 7.92e-6 cm²/s from the λ values below, matching
+   standard tabulated diffusivities to 3 sig figs. Used for the
+   limiting-current / over-limiting-current model, see eq. 8.
    ═══════════════════════════════════════════════════════════════ */
 const SPECIES = [
   { id:'Co', label:'Co²⁺', z:2,  lambda:53.0,  color:'var(--s-co)'  },
@@ -460,6 +479,7 @@ const SPECIES = [
   { id:'H',  label:'H⁺',   z:1,  lambda:349.8, color:'var(--s-h)'   },
   { id:'OH', label:'OH⁻',  z:-1, lambda:198.0, color:'var(--s-oh)'  },
 ];
+SPECIES.forEach(sp=> sp.D = (R_GAS*T_KELVIN*sp.lambda) / (Math.abs(sp.z)*F*F));  // cm^2/s
 const SP = Object.fromEntries(SPECIES.map(s=>[s.id,s]));
 
 /* ═══════════════════════════════════════════════════════════════
@@ -487,6 +507,21 @@ const MEMBRANE_TYPES = ['CEM','AEM','CEM','AEM','CEM'];
 const AREAL_R_MEMBRANE = 5;    // Ω·cm², placeholder per membrane
 const GAP_CM = 0.5;             // cm, placeholder compartment spacer thickness
 const V_OVERPOTENTIAL = 1.5;    // V, placeholder fixed electrode overpotential
+
+// ── Over-limiting current / water-splitting at interior membranes (eq. 8) ──
+// DELTA_CM sets the Nernst diffusion-boundary-layer thickness that determines
+// each membrane's limiting current density -- typical value for a
+// turbulence-promoting spacer in a bench ED/EDM cell (placeholder, not
+// measured for this specific stack).
+const DELTA_CM = 50e-4;   // cm (50 micron)
+// Once a membrane's applied current exceeds its limiting current, water
+// dissociates right at that membrane surface to carry the excess -- this is
+// what actually caps real-world stack voltage instead of it climbing
+// unbounded (see eq. 8). Modeled as a roughly-constant per-membrane
+// overpotential (activation-style, not ohmic) while a membrane is in that
+// regime -- a placeholder magnitude, but the mechanism itself (and thus the
+// resulting voltage knee-then-plateau shape) is physically real.
+const V_WATERSPLIT_OVERPOTENTIAL = 0.8;   // V, per over-limiting membrane
 
 /* ═══════════════════════════════════════════════════════════════
    SIMULATION STATE
@@ -547,6 +582,7 @@ function stepOnce(st){
   const molBefore = comps.map(c=>Object.fromEntries(SPECIES.map(sp=>[sp.id, c.conc[sp.id]*c.vol])));
 
   // membrane fluxes: mem[k] sits between comps[k] (cathode side) and comps[k+1] (anode side)
+  st.overLimitFlags = [];
   for(let k=0;k<MEMBRANE_TYPES.length;k++){
     const type = MEMBRANE_TYPES[k];
     const left = comps[k], right = comps[k+1];
@@ -554,31 +590,60 @@ function stepOnce(st){
     if(type==='CEM'){ source = right; destIdx = k; }   // cations: right -> left
     else { source = left; destIdx = k+1; }              // AEM, anions: left -> right
     const dest = comps[destIdx];
+    const srcIdx = comps.indexOf(source);
 
     const wantSign = (type==='CEM') ? 1 : -1;
     const carriers = SPECIES.filter(sp => Math.sign(sp.z)===wantSign);
     let denom = 0;
     carriers.forEach(sp=> denom += Math.abs(sp.z)*sp.lambda*Math.max(source.conc[sp.id],0));
 
-    if(denom <= 1e-30){ continue; } // no carriers available at this membrane -- flux stalls
+    // Limiting current (eq. 8): the max current this membrane's own ion
+    // inventory can sustain via diffusion to the surface (Nernst boundary
+    // layer). denom and I_lim are zero under exactly the same condition
+    // (all carrier concentrations zero), so no separate empty-source guard
+    // is needed -- I_ionic below naturally goes to 0 and the full current
+    // routes through the water-splitting branch.
+    let I_lim = 0;
+    carriers.forEach(sp=> I_lim += Math.abs(sp.z)*F*sp.D*Math.max(source.conc[sp.id],0)/1000/DELTA_CM);
+    I_lim *= st.area;
 
-    const srcIdx = comps.indexOf(source);
-    carriers.forEach(sp=>{
-      const share = (Math.abs(sp.z)*sp.lambda*Math.max(source.conc[sp.id],0)) / denom;
-      const fluxMolPerSec = share * I / (Math.abs(sp.z)*F);
-      let dMol = fluxMolPerSec * dt;
-      // Cap to what's actually available in the source THIS step. Without
-      // this, a species that fully depletes mid-step gets a flux computed
-      // from its (still-positive) start-of-step share, which can exceed
-      // what's left -- the later Math.max(...,0) clamp on write-back would
-      // then silently discard the shortfall on the source side while the
-      // destination still gets credited the full, uncapped amount: a real
-      // mass-conservation leak (caught via the mass-balance-closure KPI
-      // reading 100.27% instead of 100.00% before this fix).
-      dMol = Math.min(dMol, Math.max(molBefore[srcIdx][sp.id], 0));
-      molBefore[srcIdx][sp.id] -= dMol;
-      molBefore[destIdx][sp.id] += dMol;
-    });
+    const overLimit = I > I_lim;
+    st.overLimitFlags[k] = overLimit;
+    const I_ionic = Math.min(I, I_lim);
+
+    if(denom > 1e-30 && I_ionic > 1e-30){
+      carriers.forEach(sp=>{
+        const share = (Math.abs(sp.z)*sp.lambda*Math.max(source.conc[sp.id],0)) / denom;
+        const fluxMolPerSec = share * I_ionic / (Math.abs(sp.z)*F);
+        let dMol = fluxMolPerSec * dt;
+        // Cap to what's actually available in the source THIS step. Without
+        // this, a species that fully depletes mid-step gets a flux computed
+        // from its (still-positive) start-of-step share, which can exceed
+        // what's left -- the later Math.max(...,0) clamp on write-back would
+        // then silently discard the shortfall on the source side while the
+        // destination still gets credited the full, uncapped amount: a real
+        // mass-conservation leak (caught via the mass-balance-closure KPI
+        // reading 100.27% instead of 100.00% before this fix).
+        dMol = Math.min(dMol, Math.max(molBefore[srcIdx][sp.id], 0));
+        molBefore[srcIdx][sp.id] -= dMol;
+        molBefore[destIdx][sp.id] += dMol;
+      });
+    }
+
+    if(overLimit){
+      // Excess current beyond I_lim is carried by water splitting right at
+      // this membrane, not by the bulk carriers above. For a CEM the newly
+      // formed H+ (a cation) crosses through to dest; OH- is left behind in
+      // source. For an AEM, OH- crosses to dest and H+ is left in source.
+      const dMolWS = ((I - I_lim)/F) * dt;
+      if(type==='CEM'){
+        molBefore[destIdx]['H']  += dMolWS;
+        molBefore[srcIdx]['OH']  += dMolWS;
+      } else {
+        molBefore[destIdx]['OH'] += dMolWS;
+        molBefore[srcIdx]['H']   += dMolWS;
+      }
+    }
   }
 
   // electrode reactions (Faradaic source terms)
@@ -611,13 +676,10 @@ const KAPPA_WATER_FLOOR = 5.5e-8;   // S/cm, pure water's own intrinsic conducti
                                       // threshold" guard produced (that treated "no ions left" as a
                                       // short circuit, causing an unphysical spike-then-drop in the
                                       // voltage trace right at full depletion).
-const V_STACK_CEILING = 200;   // V, documented model-breakdown ceiling -- once a compartment nears
-                                 // full depletion, sustaining constant current via ionic conduction
-                                 // alone stops being physically realistic (real cells shift to
-                                 // water-splitting / over-limiting-current behavior here, which this
-                                 // simplified resistance model doesn't implement). Capping keeps the
-                                 // chart readable and signals "infeasible operating point" rather
-                                 // than plotting an arbitrarily large number.
+const V_STACK_CEILING = 200;   // V, remaining safety-net ceiling -- the over-limiting/water-splitting
+                                 // mechanism (eq. 8) is what should realistically bound voltage now;
+                                 // this cap only guards against the placeholder resistance/overpotential
+                                 // constants combining into something absurd, not the primary mechanism.
 function stackVoltage(st){
   const A = st.area;
   let R = 0;
@@ -626,7 +688,13 @@ function stackVoltage(st){
     R += GAP_CM/(kappa*A);
   });
   R += MEMBRANE_TYPES.length * (AREAL_R_MEMBRANE/A);
-  return Math.min(st.I*R + V_OVERPOTENTIAL, V_STACK_CEILING);
+  // Water-splitting overpotential (eq. 8): a roughly-constant activation-style
+  // penalty per membrane currently in over-limiting operation -- this is the
+  // term that actually produces a voltage knee-then-plateau instead of an
+  // unbounded climb once a compartment starts running low.
+  const overLimitCount = (st.overLimitFlags || []).filter(Boolean).length;
+  const V_watersplit = overLimitCount * V_WATERSPLIT_OVERPOTENTIAL;
+  return Math.min(st.I*R + V_OVERPOTENTIAL + V_watersplit, V_STACK_CEILING);
 }
 function phOf(conc){
   const net = conc.H - conc.OH;
@@ -659,7 +727,7 @@ function coCurrentEfficiencyAt(h, I){
 function snapshot(st){
   const conc = {}; const ph = {};
   st.compartments.forEach(c=>{ conc[c.id]=Object.assign({},c.conc); ph[c.id]=phOf(c.conc); });
-  return { t: st.t, conc, ph, V: stackVoltage(st), I: st.I };
+  return { t: st.t, conc, ph, V: stackVoltage(st), I: st.I, overLimitFlags: (st.overLimitFlags||[]).slice() };
 }
 
 function totalsBySpecies(st){
@@ -752,7 +820,7 @@ function colorVar(cssVar){
    STACK SCHEMATIC (SVG)
    ═══════════════════════════════════════════════════════════════ */
 function renderSchematic(st){
-  const boxW=150, boxH=120, gapX=20, boxY=55, svgH=215;
+  const boxW=150, boxH=120, gapX=20, boxY=55, svgH=225;
   const startX=90;
   const n=COMPT_DEFS.length;
   const rightEdge = startX + n*boxW + (n-1)*gapX;
@@ -791,12 +859,20 @@ function renderSchematic(st){
   // no membrane at the outer edges -- the two rinse compartments sit
   // directly against the electrodes themselves.
   let membBars='';
+  const overLimitFlags = (st && st.overLimitFlags) || [];
   for(let i=0;i<MEMBRANE_TYPES.length;i++){
     const mx = membraneX[i];
     const col = MEMBRANE_TYPES[i]==='CEM' ? colorVar('var(--m-cem)') : colorVar('var(--m-aem)');
     membBars += `<line x1="${mx}" y1="${boxY-6}" x2="${mx}" y2="${boxY+boxH+6}" stroke="${col}" stroke-width="4"/>`;
     membBars += `<rect x="${mx-16}" y="${boxY-24}" width="32" height="16" rx="3" fill="${col}"/>`;
     membBars += `<text x="${mx}" y="${boxY-12}" text-anchor="middle" font-size="9" font-weight="700" fill="white">${MEMBRANE_TYPES[i]}</text>`;
+    if(overLimitFlags[i]){
+      // Over-limiting badge (eq. 8): this membrane's own ion supply can't
+      // sustain the applied current -- water-splitting is carrying the rest.
+      const warnCol = colorVar('var(--warn)');
+      membBars += `<circle cx="${mx}" cy="${boxY+boxH+18}" r="7" fill="${warnCol}"/>`;
+      membBars += `<text x="${mx}" y="${boxY+boxH+22}" text-anchor="middle" font-size="10" font-weight="700" fill="white">!</text>`;
+    }
   }
 
   const svg = `<svg viewBox="0 0 ${rightEdge+90} ${svgH}" width="100%" style="max-width:${rightEdge+90}px">
@@ -991,8 +1067,12 @@ function renderCharts(){
     {key:'V', label:'Stack voltage (V)', color: colorVar('var(--accent)')},
     {key:'I', label:'Current, constant '+state.I.toFixed(3)+' A', color: colorVar('var(--text-faint)')},
   ];
+  const overLimitNow = (last.overLimitFlags||[]).filter(Boolean).length;
+  if(overLimitNow > 0){
+    legendItemsV.push({key:'overlimit', label:'⚠ '+overLimitNow+' membrane(s) over-limiting -- water-splitting is adding to voltage (eq. 8)', color: colorVar('var(--warn)')});
+  }
   if(last.V >= V_STACK_CEILING - 1e-6){
-    legendItemsV.push({key:'ceiling', label:'⚠ hit model voltage ceiling ('+V_STACK_CEILING+' V) -- a compartment is nearly depleted; readings beyond this point are not physically meaningful', color: colorVar('var(--warn)')});
+    legendItemsV.push({key:'ceiling', label:'⚠ hit the model safety-net ceiling ('+V_STACK_CEILING+' V) -- the placeholder resistance/overpotential constants have combined into an unrealistic value; readings beyond this point aren\'t meaningful', color: colorVar('var(--crit)')});
   }
   buildLegend(document.getElementById('legendVoltage'), legendItemsV, 'voltage');
 
@@ -1090,6 +1170,11 @@ function renderKpis(){
   // this number and that curve's endpoint can never drift apart.
   const coEff = coCurrentEfficiencyAt(last, state.I);
   addKpi(strip, 'Current efficiency, Co²⁺', coEff.toFixed(1)+'%', '', 'share of D1→C2 cation current');
+
+  // membranes currently over their limiting current (water-splitting active, eq. 8)
+  const overLimitCount = (last.overLimitFlags||[]).filter(Boolean).length;
+  addKpi(strip, 'Membranes over-limiting', overLimitCount+' / '+MEMBRANE_TYPES.length,
+    overLimitCount>0?'warn':'good', overLimitCount>0 ? 'water-splitting active — see eq. 8' : 'all within diffusion limit');
 }
 function addKpi(strip, label, value, cls, sub){
   const el = document.createElement('div'); el.className='kpi';
