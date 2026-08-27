@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "edm-sim-hosting"
-  }
+  },
+  "targets": {
+    "edm-sim-hosting": {
+      "hosting": {
+        "main": [
+          "edm-sim-hosting"
+        ],
+        "arwa": [
+          "arwa-edm-sim"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
