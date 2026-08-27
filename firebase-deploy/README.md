@@ -3,21 +3,21 @@
 Deploys `WebUI/edm_stack_simulator.html` to Firebase Hosting, project `edm-sim-hosting`
 (dedicated GCP project, separate from any Skawix production projects).
 
-Two Hosting sites serve the same content:
+Live site: **https://arwa-edm-sim.web.app** (target name `arwa`).
 
-| Site | URL | Target name |
-|---|---|---|
-| `edm-sim-hosting` (default) | https://edm-sim-hosting.web.app | `main` |
-| `arwa-edm-sim` | **https://arwa-edm-sim.web.app** (preferred, shorter link) | `arwa` |
+The project's default site (`edm-sim-hosting.web.app`, target `main`) was disabled via
+`firebase hosting:disable --site edm-sim-hosting` -- it now 404s. Firebase doesn't allow
+deleting a project's default site outright (only non-default sites can be deleted), so
+"disabled" is the closest equivalent to removal; the site record still exists but serves
+nothing. `firebase.json` only lists the `arwa` target, so a normal `firebase deploy` won't
+accidentally re-enable it.
 
 ## To redeploy after updating the simulator
 
 ```bash
 cp ../WebUI/edm_stack_simulator.html public/index.html
-firebase deploy --only hosting --project edm-sim-hosting   # deploys BOTH sites
+firebase deploy --only hosting --project edm-sim-hosting
 ```
-
-To deploy to just one site: `firebase deploy --only hosting:arwa` or `--only hosting:main`.
 
 ## Adding another site later
 

@@ -1,12 +1,6 @@
 {
   "hosting": [
     {
-      "target": "main",
-      "public": "public",
-      "ignore": ["firebase.json", "**/.*"],
-      "rewrites": []
-    },
-    {
       "target": "arwa",
       "public": "public",
       "ignore": ["firebase.json", "**/.*"],
