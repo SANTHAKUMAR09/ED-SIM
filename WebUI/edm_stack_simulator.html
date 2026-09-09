@@ -407,7 +407,7 @@ canvas.barchart{ width:100%; display:block; }
 
   <div class="eq-section">
     <h2>Model equations</h2>
-    <p class="eq-intro">27 equations now drive this simulator, not 8. Equations 1–8 are the original core (ion competition, Faraday's law, mass balance, electrode reactions, voltage, pH, current efficiency, over-limiting current) — see below for those in full. Equations 9–27, summarized in the table beneath, add multi-metal precipitation/scaling chemistry, membrane fouling, water transport, per-compartment hydrodynamics, N-unit stack tiling, monovalent-selective and bipolar membranes, and a smoother concentration-polarization voltage model. This version has diverged from a simple 1:1 web/MATLAB match — it now mirrors the extended MATLAB model (<code>EDM_QuadStack_Simulator.m</code>) instead.</p>
+    <p class="eq-intro">27 equations now drive this simulator, not 8. Equations 1–8 are the original core (ion competition, Faraday's law, mass balance, electrode reactions, voltage, pH, current efficiency, over-limiting current). Equations 5b and 9–27 below add multi-metal precipitation/scaling chemistry, membrane fouling, water transport, per-compartment hydrodynamics, N-unit stack tiling, monovalent-selective and bipolar membranes, and a smoother concentration-polarization voltage model. This version has diverged from a simple 1:1 web/MATLAB match — it now mirrors the extended MATLAB model (<code>EDM_QuadStack_Simulator.m</code>) instead.</p>
 
     <div class="eq-grid">
       <div class="eq-card">
@@ -457,28 +457,90 @@ canvas.barchart{ width:100%; display:block; }
         <div class="eq-formula">I<sub>lim</sub> = A·Σ<sub>i</sub>(S<sub>i</sub>·|z<sub>i</sub>|·F·D<sub>i</sub>·C<sub>i</sub>/(1000·δ<sub>eff</sub>))</div>
         <div class="eq-desc"><code>δ<sub>eff</sub></code> is no longer one fixed number — it's the compartment's own flow-derived boundary layer (eq. 18), thickened by whatever cake and scale have deposited on that membrane (eq. 11, 27). A fouled or under-flowed membrane goes over-limiting sooner.</div>
       </div>
-    </div>
 
-    <div class="table-wrap" style="margin-top:18px">
-      <table class="datatable">
-        <thead><tr><th>Eq.</th><th>What it adds</th></tr></thead>
-        <tbody>
-          <tr><td>5b</td><td>Ionic-strength (Davies-type) correction to λ — fixes conductivity overestimate at real concentrations</td></tr>
-          <tr><td>9–11</td><td>Suspended solids: deposition onto the membrane they're driven against, cake fouling resistance + boundary-layer thickening</td></tr>
-          <tr><td>12–14</td><td>Precipitation: saturation index vs. Ksp for gypsum + 10 metal hydroxides, kinetic relaxation, bulk/surface split</td></tr>
-          <tr><td>15</td><td>Nucleation induction-time barrier — solid doesn't form the instant SI crosses zero</td></tr>
-          <tr><td>16</td><td>Dissolution when a compartment later goes undersaturated (suspended crystal first, then cake, then in-situ scale)</td></tr>
-          <tr><td>17</td><td>Water self-ionization re-speciation (closed form, every step)</td></tr>
-          <tr><td>18</td><td>Per-compartment flow → boundary layer via the Lévêque correlation (thin-channel laminar flow)</td></tr>
-          <tr><td>19–20</td><td>Electro-osmotic drag + osmosis — compartment volumes actually change over a run</td></tr>
-          <tr><td>21</td><td>N repeating units, tiled and lumped by compartment type (real multi-cell stack wiring)</td></tr>
-          <tr><td>22</td><td>Monovalent-selective membrane weighting (Mono-CEM/Mono-AEM)</td></tr>
-          <tr><td>23</td><td>Permselectivity / co-ion leakage — no real membrane is 100% selective</td></tr>
-          <tr><td>24–25</td><td>Flux decline and conductivity decline, reported per membrane/compartment over time</td></tr>
-          <tr><td>26</td><td>Concentration-polarization film resistance — smooth divergence as current nears the limit, not a step function</td></tr>
-          <tr><td>27</td><td>Fouling/scale layer resistance derived from deposit thickness and porosity, not a fitted constant</td></tr>
-        </tbody>
-      </table>
+      <div class="eq-card">
+        <div class="eq-label">5b · Ionic-strength conductivity correction</div>
+        <div class="eq-formula">λ<sub>i</sub>(μ) = λ<sub>i</sub>·max(1 − b·√μ/(1+√μ), 0.05) &nbsp;&nbsp;where&nbsp;&nbsp; μ = 0.5·Σ<sub>i</sub>(z<sub>i</sub>²·C<sub>i</sub>)</div>
+        <div class="eq-desc">Raw limiting (infinite-dilution) conductivities overestimate a concentrated solution's real conductivity — 0.5 M NaCl comes out ~40% too high using λ° directly, which understates stack resistance and hence voltage. This Kohlrausch/Davies-shaped correction (fitted to NaCl, <code>b</code>=0.67) brings it back in line. It cancels out of the eq. 1 ratio — every λ is scaled alike — so it only moves voltage, never which ion wins a membrane's current.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">9–11 · Suspended solids, deposition &amp; fouling</div>
+        <div class="eq-formula">dw/dt = v<sub>dep</sub>·C<sub>TSS</sub> &nbsp;&nbsp;·&nbsp;&nbsp; R<sub>cake</sub> = ℓ<sub>cake</sub> / (κ·ε<sup>1.5</sup>·A)</div>
+        <div class="eq-desc">Particles carry no Faradaic current and never cross a membrane — they drift toward whichever electrode their charge points at and deposit on the first membrane in their path. That cake both adds resistance (only its pores conduct, via the Bruggeman <code>ε<sup>1.5</sup></code> term) and thickens the diffusion boundary layer, lowering that membrane's limiting current. Real fouling shows up as rising voltage <em>and</em> earlier over-limiting together, not one or the other.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">12–14 · Precipitation</div>
+        <div class="eq-formula">SI = log<sub>10</sub>(IAP/K<sub>sp</sub>) &nbsp;&nbsp;·&nbsp;&nbsp; IAP = (γ<sub>cat</sub>C<sub>cat</sub>)<sup>ν<sub>cat</sub></sup>(γ<sub>an</sub>C<sub>an</sub>)<sup>ν<sub>an</sub></sup> &nbsp;&nbsp;·&nbsp;&nbsp; x = x<sub>eq</sub>·(1−e<sup>−k·Δt</sup>)</div>
+        <div class="eq-desc">Whenever a compartment's ion activity product exceeds a solid's solubility product it's supersaturated. The extent that actually precipitates each step is solved exactly (by bisection, for <code>x</code> such that IAP(x)=K<sub>sp</sub>) then damped by a first-order kinetic relaxation — precipitation isn't instantaneous even when SI&gt;0. New solid splits between the bulk (becomes suspended TSS) and direct growth on the adjacent membrane, since real deposits nucleate preferentially where supersaturation is highest — right at the membrane surface.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">15 · Nucleation barrier</div>
+        <div class="eq-formula">no growth while SI &lt; SI<sub>nuc</sub> &nbsp;&nbsp;·&nbsp;&nbsp; t<sub>induction</sub> = τ<sub>ref</sub> / SI²</div>
+        <div class="eq-desc">Real crystals don't appear the instant SI crosses zero — primary nucleation needs both a driving force and time, and that induction time falls steeply as supersaturation rises. Once any seed of that solid already exists (suspended or on a membrane), the barrier is gone and growth resumes freely. This is what stops the model precipitating everything the moment pH shifts — and it's the same reason gypsum tolerates real supersaturation before scaling starts, which is the entire premise behind scale-control chemistry.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">16 · Dissolution</div>
+        <div class="eq-formula">x = x<sub>eq</sub>·(1−e<sup>−k<sub>dissol</sub>·Δt</sup>) &nbsp;&nbsp;drawn from: suspended solid → cake → in-situ scale</div>
+        <div class="eq-desc">Solid formed earlier redissolves once its compartment later goes undersaturated — which happens constantly here, since the membranes keep moving ions and the electrodes keep moving pH. Dissolution draws on whichever solid is in contact with that compartment's solution, loosest (most exposed surface) first. Without this the model would only ever accumulate scale and badly overpredict fouling.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">17 · Water self-ionization</div>
+        <div class="eq-formula">C<sub>H</sub>·C<sub>OH</sub> = K<sub>w</sub>, net (C<sub>H</sub>−C<sub>OH</sub>) held fixed — solved in closed form every step</div>
+        <div class="eq-desc">H⁺ and OH⁻ are transported independently by the membranes and generated independently at the electrodes, so nothing in the transport step alone stops a compartment ending up with high H⁺ <em>and</em> high OH⁻ at once — chemically impossible, since they neutralize on contact. Re-speciating onto the water equilibrium while holding the net charge fixed is both physically correct (net is what transport/electrodes actually determined) and exactly conserves charge.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">18 · Flow → boundary layer (Lévêque)</div>
+        <div class="eq-formula">Sh = 1.85·(Re·Sc·d<sub>h</sub>/L)<sup>1/3</sup> &nbsp;&nbsp;·&nbsp;&nbsp; δ = d<sub>h</sub>/Sh &nbsp;(capped at half the channel gap)</div>
+        <div class="eq-desc">A single fixed boundary layer forces every compartment to share one diffusion resistance regardless of how hard it's being pumped. This correlation — for laminar, hydrodynamically-developing flow in a thin spacer-filled channel — derives δ from each compartment's own flow rate instead: more flow thins the film, raises the limiting current, and delays over-limiting. Zero flow (the default) falls back to the fixed 50 µm placeholder, reproducing the simpler behavior exactly.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">19–20 · Water transport</div>
+        <div class="eq-formula">ΔV<sub>drag</sub> = n<sub>drag</sub>·(I·Δt/F)·V<sub>m</sub> &nbsp;&nbsp;·&nbsp;&nbsp; ΔV<sub>osm</sub> = L<sub>p</sub>·A·Δπ·Δt, &nbsp;Δπ = RT·Σ(C<sub>right</sub>−C<sub>left</sub>)</div>
+        <div class="eq-desc">Compartment volumes aren't actually fixed in a real stack. Electro-osmotic drag carries water along with every migrating counter-ion — unavoidable, growing with current and run time. Osmosis separately pulls water from the dilute side toward the concentrated side, i.e. it works to <em>undo</em> the separation. Together these explain the common lab observation of one compartment steadily gaining volume while its neighbor drains — often mistaken for a leak, but it's these two mechanisms, not a failed seal.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">21 · N repeating units</div>
+        <div class="eq-formula">compartments lumped by type (6 total) &nbsp;&nbsp;·&nbsp;&nbsp; membrane flux scales by row multiplicity, mult·I</div>
+        <div class="eq-desc">Real stacks tile many identical cells in series between the same two electrode rinses. Rather than modeling N separate physical compartments, all N copies of each compartment <em>type</em> are lumped into one shared tank — exactly how a real stack is manifolded, all the D1 chambers share one feed tank — and the ionic flux into that tank scales by how many membrane copies feed it. N=1 reproduces the single-cell model exactly.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">22 · Monovalent selectivity</div>
+        <div class="eq-formula">S<sub>i</sub> = MONO_SELECTIVITY <sup>−(|z<sub>i</sub>|−1)</sup></div>
+        <div class="eq-desc">A mono-selective membrane's thin surface layer electrostatically repels multivalent counter-ions, so rejection strengthens with charge: monovalent ions pass essentially unaffected (<code>S</code>=1), divalent ions are suppressed by the selectivity ratio, trivalent by its square. This is the real commercial mechanism for bleeding off Na⁺ while holding back Co²⁺/Ca²⁺ at the membrane itself, rather than relying on downstream chemistry.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">23 · Permselectivity &amp; co-ion leakage</div>
+        <div class="eq-formula">I<sub>counter</sub> = α·I &nbsp;&nbsp;·&nbsp;&nbsp; I<sub>co-ion</sub> = (1−α)·I &nbsp;(carried the opposite direction)</div>
+        <div class="eq-desc">No real membrane is perfectly selective. A CEM still lets some anions leak through backward, an AEM some cations — that leaked current does no separation work at all, and it's the single biggest reason measured current efficiency falls short of the ideal-membrane prediction. It's also what lets trace metal reach the cathode rinse and trace Cl⁻ reach the anode rinse over a long run: a small but genuine consequence of modeling real (95%/92% permselective), not ideal, membranes.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">24–25 · Flux &amp; conductivity decline</div>
+        <div class="eq-formula">Ṅ(t) / Ṅ(0) &nbsp;&nbsp;·&nbsp;&nbsp; κ(t) / κ(0) &nbsp;&nbsp;— reported per membrane / compartment</div>
+        <div class="eq-desc">Not new physics — pure diagnostics, tracking how far each membrane's actual counter-ion flux has fallen from its starting value (depletion and fouling eating into capacity) and how far each compartment's conductivity has drifted from its start. Useful for seeing <em>where</em> a stack is losing performance over a run, not just the aggregate voltage number.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">26 · Concentration polarization</div>
+        <div class="eq-formula">c<sub>surface</sub>/c<sub>bulk</sub> = 1 − I<sub>counter</sub>/I<sub>lim</sub> &nbsp;&nbsp;·&nbsp;&nbsp; R<sub>film</sub> = (δ/A·κ)·(1/fac − 1)</div>
+        <div class="eq-desc">As current approaches the limiting current, the counter-ion concentration right at the membrane surface collapses toward zero, and that depleted film is highly resistive — its resistance diverges <em>smoothly</em> as the limit is approached. Without this, the model could only add a fixed step-jump in voltage once a membrane goes over-limiting (eq. 8's water-splitting overpotential). This produces the real plateau shape of a polarization curve — what a Cowan-plot analysis on bench data actually looks for.</div>
+      </div>
+
+      <div class="eq-card">
+        <div class="eq-label">27 · Fouling/scale resistance from porosity</div>
+        <div class="eq-formula">R = ℓ / (κ·ε<sup>1.5</sup>·A) &nbsp;&nbsp;where&nbsp;&nbsp; ℓ = w / (ρ<sub>particle</sub>·(1−ε))</div>
+        <div class="eq-desc">Rather than fitting an arbitrary "ohms per mg" constant for cake and scale resistance, this derives it from the deposit's own thickness — mass ÷ density ÷ solid fraction — and its porosity via the Bruggeman relation for a porous conductor. Porosity has real published ranges (loose particle cake ~0.3–0.7, dense crystalline scale ~0.05–0.2), so this replaces two unfittable constants with one that can actually be measured or looked up.</div>
+      </div>
     </div>
 
     <div class="eq-legend">
@@ -498,6 +560,24 @@ canvas.barchart{ width:100%; display:block; }
       <div><span class="term">δ<sub>eff</sub></span> — effective boundary layer, incl. fouling (cm)</div>
       <div><span class="term">SI</span> — saturation index, log₁₀(IAP/Ksp)</div>
       <div><span class="term">R, T</span> — gas constant (8.314 J/mol/K), temperature (298.15 K)</div>
+      <div><span class="term">μ</span> — ionic strength, 0.5·Σz<sub>i</sub>²C<sub>i</sub> (mol/L)</div>
+      <div><span class="term">b</span> — Davies-type conductivity-correction coefficient (0.67, fit to NaCl)</div>
+      <div><span class="term">C<sub>TSS</sub></span> — suspended-solids concentration in a compartment (mg/L)</div>
+      <div><span class="term">v<sub>dep</sub></span> — deposition velocity of suspended solids onto a membrane</div>
+      <div><span class="term">ε</span> — porosity (void fraction) of a cake or scale deposit</div>
+      <div><span class="term">ℓ</span> — deposit thickness (cake or in-situ scale), cm</div>
+      <div><span class="term">ρ<sub>particle</sub></span> — density of the precipitated solid</div>
+      <div><span class="term">K<sub>sp</sub>, IAP</span> — solubility product and ion activity product of a solid</div>
+      <div><span class="term">ν<sub>cat</sub>, ν<sub>an</sub></span> — stoichiometric coefficients of a solid's cation/anion</div>
+      <div><span class="term">τ<sub>ref</sub>, SI<sub>nuc</sub></span> — reference induction time and nucleation-onset threshold</div>
+      <div><span class="term">k, k<sub>dissol</sub></span> — first-order kinetic-relaxation rate constants (1/s)</div>
+      <div><span class="term">Sh, Re, Sc</span> — Sherwood, Reynolds, Schmidt numbers (Lévêque correlation)</div>
+      <div><span class="term">d<sub>h</sub>, L</span> — channel hydraulic diameter and length (cm)</div>
+      <div><span class="term">n<sub>drag</sub></span> — electro-osmotic drag coefficient (H₂O molecules per ion)</div>
+      <div><span class="term">V<sub>m</sub></span> — molar volume of water (18 cm³/mol)</div>
+      <div><span class="term">L<sub>p</sub>, Δπ</span> — osmotic permeability and osmotic pressure difference across a membrane</div>
+      <div><span class="term">N, mult</span> — number of repeating stack units, and a compartment/membrane's row multiplicity</div>
+      <div><span class="term">α</span> — permselectivity (fraction of current carried by the correct-sign counter-ion)</div>
     </div>
   </div>
 
@@ -1194,7 +1274,11 @@ function memColor(type){
    STACK SCHEMATIC
    ═══════════════════════════════════════════════════════════════ */
 function renderSchematic(st){
-  const boxW=150, boxH=120, gapX=20, boxY=55, svgH=225;
+  // boxH sized for the worst case: D1 (Feed) can show up to 13 species lines
+  // (10 metals + Na/SO4/Cl) at 11px each starting 38px down from the box
+  // top -- 38+13*11=181px of content, so boxH needs real headroom past that
+  // before the membrane/electrode labels start below the box.
+  const boxW=150, boxH=210, gapX=20, boxY=55, svgH=320;
   const startX=90;
   const n=COMPT_DEFS.length;
   const rightEdge = startX + n*boxW + (n-1)*gapX;
