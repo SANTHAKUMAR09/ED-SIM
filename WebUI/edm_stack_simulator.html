@@ -267,13 +267,24 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
   gap: 6px 24px; font-size: 11.5px; color: var(--text-muted);
 }
 .eq-legend .term{ font-family: var(--font-mono); color: var(--text); font-weight:600; }
-</style>
 
+.field-row select{
+  padding: 5px 8px; border-radius: 6px; border:1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font-family: var(--font-ui); font-size:12.5px;
+}
+.mem-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+.mem-row .mem-label{ font-size:12px; color:var(--text-muted); flex:1; }
+.mem-row select{ width:120px; }
+.chem-toggle-row{ display:flex; align-items:center; gap:8px; margin-bottom:9px; font-size:12.5px; color:var(--text-muted); }
+.chem-toggle-row input[type=checkbox]{ accent-color: var(--accent); width:15px; height:15px; }
+canvas.barchart{ width:100%; display:block; }
+
+</style>
 <div class="app">
   <div class="topbar">
     <div class="brand">
       <div class="name">EDM Quad Bench</div>
-      <div class="tag">Electrodialysis metathesis · single-unit, corrected termination</div>
+      <div class="tag">Electrodialysis metathesis · multi-metal, multi-physics · corrected termination</div>
     </div>
     <div class="clock mono" id="clockReadout">00:00</div>
     <div class="btn-row">
@@ -295,11 +306,28 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
             <span class="radio-opt"><input type="radio" name="mode" checked disabled> Constant current</span>
           </div>
         </div>
-        <div class="field-row"><label>Current (A)</label><input type="number" id="cfgCurrent" value="0.5" min="0" step="0.01"></div>
-        <div class="field-row"><label>Flow, all loops (mL/min)</label><input type="number" id="cfgFlow" value="70" min="0" step="1"></div>
+        <div class="field-row"><label>Current (A)</label><input type="number" id="cfgCurrent" value="0.30" min="0" step="0.01"></div>
         <div class="field-row"><label>Duration (h)</label><input type="number" id="cfgDuration" value="4" min="0.1" step="0.5"></div>
         <div class="field-row"><label>Timestep (min)</label><input type="number" id="cfgDt" value="1" min="0.1" step="0.5"></div>
-        <div class="hint">Flow is recirculation speed only — each loop is treated as instantaneously well-mixed, so flow does not change the mass balance in this model.</div>
+        <div class="field-row"><label>Repeating units (N)</label><input type="number" id="cfgNUnits" value="1" min="1" step="1"></div>
+        <div class="hint">N=1 uses the 5 membrane types below as-is. N&gt;1 tiles a fixed CEM-AEM-CEM-AEM-CEM-CEM sequence (matching real multi-cell stack wiring) and the 5 selectors below no longer apply — see eq. 21.</div>
+      </div>
+
+      <div class="card" id="membraneCard">
+        <h3>Membranes (N=1 only)</h3>
+        <div class="mem-row"><span class="mem-label">M1 · Cathode | D2</span><select id="memType0"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+        <div class="mem-row"><span class="mem-label">M2 · D2 | C2</span><select id="memType1"><option value="AEM" selected>AEM</option><option value="Mono-AEM">Mono-AEM</option><option value="BPM">BPM</option></select></div>
+        <div class="mem-row"><span class="mem-label">M3 · C2 | D1</span><select id="memType2"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+        <div class="mem-row"><span class="mem-label">M4 · D1 | C1</span><select id="memType3"><option value="AEM" selected>AEM</option><option value="Mono-AEM">Mono-AEM</option><option value="BPM">BPM</option></select></div>
+        <div class="mem-row"><span class="mem-label">M5 · C1 | Anode</span><select id="memType4"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+        <div class="hint">Mono-CEM/Mono-AEM reject multivalent counter-ions (eq. 22) — use to bleed off Na⁺ while holding back metals. BPM carries no salt at all; it splits water in place (eq. "BPM"), costing an extra ~0.9 V junction potential per copy.</div>
+      </div>
+
+      <div class="card">
+        <h3>Chemistry options</h3>
+        <div class="chem-toggle-row"><input type="checkbox" id="cfgScaling" checked><label for="cfgScaling">Precipitation / scaling chemistry (eq. 12–16)</label></div>
+        <div class="chem-toggle-row"><input type="checkbox" id="cfgWaterTransport" checked><label for="cfgWaterTransport">Water transport — osmosis + electro-osmotic drag (eq. 19–20)</label></div>
+        <div class="hint">Both default on, matching the MATLAB reference model. Turning them off reproduces the simpler fixed-volume, no-precipitation behavior of the original 8-equation version.</div>
       </div>
 
       <div class="card">
@@ -328,6 +356,8 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
           <button class="chart-tab" data-tab="voltage">Voltage &amp; current</button>
           <button class="chart-tab" data-tab="ph">pH</button>
           <button class="chart-tab" data-tab="efficiency">Current efficiency</button>
+          <button class="chart-tab" data-tab="metals">Metal recovery</button>
+          <button class="chart-tab" data-tab="scaling">Scaling</button>
           <button class="chart-tab" data-tab="table">Snapshot table</button>
         </div>
 
@@ -351,6 +381,16 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
           <canvas id="chartEfficiency" height="260"></canvas>
           <div class="legend" id="legendEfficiency"></div>
         </div>
+        <div class="chart-panel" data-panel="metals">
+          <canvas class="barchart" id="chartMetals" height="300"></canvas>
+          <div class="hint" style="margin-top:8px">Percent of each metal's initial Feed (D1) inventory recovered into C2 by the current run time. All metals share the same CEM current (eq. 1) — there is no chemical selectivity between them unless a Mono-CEM is selected at M3.</div>
+        </div>
+        <div class="chart-panel" data-panel="scaling">
+          <div class="table-wrap">
+            <table class="datatable" id="scalingTable"></table>
+          </div>
+          <div class="hint" style="margin-top:8px">SI = log₁₀(IAP/Ksp); &gt;0 is supersaturated. "Present" is solid currently in the system (suspended + on membranes); it can be nonzero even with scaling chemistry OFF if you're only viewing saturation risk, since SI is reported either way (see eq. 12).</div>
+        </div>
         <div class="chart-panel" data-panel="table">
           <div class="time-scrub">
             <span class="hint" style="margin:0">t =</span>
@@ -367,81 +407,103 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
 
   <div class="eq-section">
     <h2>Model equations</h2>
-    <p class="eq-intro">The eight equations the simulator runs: how much of each ion moves each timestep, which ion wins the competition at a shared membrane, how concentrations update, how voltage / pH are derived from the result, how the Co²⁺ current-efficiency curve is built from that same history, and — the one that actually caps real-world voltage — what happens once a membrane runs out of ions to carry the applied current.</p>
+    <p class="eq-intro">27 equations now drive this simulator, not 8. Equations 1–8 are the original core (ion competition, Faraday's law, mass balance, electrode reactions, voltage, pH, current efficiency, over-limiting current) — see below for those in full. Equations 9–27, summarized in the table beneath, add multi-metal precipitation/scaling chemistry, membrane fouling, water transport, per-compartment hydrodynamics, N-unit stack tiling, monovalent-selective and bipolar membranes, and a smoother concentration-polarization voltage model. This version has diverged from a simple 1:1 web/MATLAB match — it now mirrors the extended MATLAB model (<code>EDM_QuadStack_Simulator.m</code>) instead.</p>
 
     <div class="eq-grid">
       <div class="eq-card">
         <div class="eq-label">1 · Transport-number share</div>
-        <div class="eq-formula">η<sub>i</sub> = (|z<sub>i</sub>| · λ<sub>i</sub> · C<sub>i</sub>) / Σ<sub>j</sub>(|z<sub>j</sub>| · λ<sub>j</sub> · C<sub>j</sub>)</div>
-        <div class="eq-desc">At a given membrane, every same-sign ion present in the source compartment competes for the current in proportion to its ionic conductance (charge × mobility × concentration). This is Kohlrausch's law applied per-membrane — <code>η</code> is recomputed every timestep as concentrations shift, not a fixed efficiency constant. The sum of <code>η</code> over all competing ions is always exactly 1.</div>
+        <div class="eq-formula">η<sub>i</sub> = (S<sub>i</sub>·|z<sub>i</sub>| · λ<sub>i</sub> · C<sub>i</sub>) / Σ<sub>j</sub>(S<sub>j</sub>·|z<sub>j</sub>| · λ<sub>j</sub> · C<sub>j</sub>)</div>
+        <div class="eq-desc">Every same-sign ion present in the source compartment competes for the current in proportion to its ionic conductance. <code>S<sub>i</sub></code> is a monovalent-selectivity weight (eq. 22) — 1 for a standard CEM/AEM, less than 1 for multivalent ions at a Mono-CEM/Mono-AEM. All 10 metals plus Na⁺ compete here together; nothing chemically distinguishes Co²⁺ from Ni²⁺ unless the membrane itself does.</div>
       </div>
 
       <div class="eq-card">
         <div class="eq-label">2 · Faraday's-law flux</div>
-        <div class="eq-formula">J<sub>i</sub> = η<sub>i</sub> · I / (|z<sub>i</sub>| · F)</div>
-        <div class="eq-desc">The molar flux of species <code>i</code> across that membrane. A 2+ ion (Co²⁺, Ca²⁺, SO4²⁻) needs twice the charge to move the same mole count as a 1+ ion (Na⁺, H⁺, Cl⁻) — that's the <code>|z<sub>i</sub>|</code> in the denominator.</div>
+        <div class="eq-formula">J<sub>i</sub> = η<sub>i</sub> · I<sub>counter</sub> / (|z<sub>i</sub>| · F)</div>
+        <div class="eq-desc">The molar flux of species <code>i</code>. <code>I<sub>counter</sub></code> (not the full applied current) is what actually needs carrying by counter-ions once permselectivity (eq. 23) is accounted for — real membranes leak some current the other way as co-ions.</div>
       </div>
 
       <div class="eq-card">
         <div class="eq-label">3 · Compartment mass balance</div>
-        <div class="eq-formula">ΔC<sub>i</sub> = (J<sub>in</sub> − J<sub>out</sub>) · Δt / V<sub>compartment</sub></div>
-        <div class="eq-desc">Each of the 6 loops is a well-mixed batch volume with no continuous feed/bleed — flux in one side, flux out the other, converted to a concentration change over the timestep. Flux is capped at what's actually available in the source that step, so a species can't go negative or create mass out of nowhere when it fully depletes mid-step.</div>
+        <div class="eq-formula">ΔC<sub>i</sub> = (J<sub>in</sub> − J<sub>out</sub>) · Δt / V<sub>compartment</sub>(t)</div>
+        <div class="eq-desc">Volume is no longer fixed at 250 mL — water transport (eq. 19–20) changes it every step. Flux is still capped at what's actually available in the source that step, so a species can't go negative or create mass from nowhere when it fully depletes mid-step.</div>
       </div>
 
       <div class="eq-card">
         <div class="eq-label">4 · Electrode reactions</div>
         <div class="eq-formula">d[OH⁻]/dt |<sub>cathode</sub> = I/F &nbsp;&nbsp;·&nbsp;&nbsp; d[H⁺]/dt |<sub>anode</sub> = I/F</div>
-        <div class="eq-desc">Water-splitting at the two electrode surfaces: 2H<sub>2</sub>O + 2e⁻ → H<sub>2</sub> + 2OH⁻ at the cathode, 2H<sub>2</sub>O → O<sub>2</sub> + 4H⁺ + 4e⁻ at the anode. These are Faradaic source terms layered on top of the membrane transport above, at rate <code>I/F</code> (one electron per OH⁻ or H⁺).</div>
+        <div class="eq-desc">Water-splitting at the two electrode surfaces, unchanged from the original model — 2H₂O + 2e⁻ → H₂ + 2OH⁻ at the cathode, 2H₂O → O₂ + 4H⁺ + 4e⁻ at the anode.</div>
       </div>
 
       <div class="eq-card">
         <div class="eq-label">5 · Conductivity &amp; stack voltage</div>
-        <div class="eq-formula">κ = 0.001·Σ<sub>i</sub>(λ<sub>i</sub>·|z<sub>i</sub>|·C<sub>i</sub>) &nbsp;·&nbsp; V = I·(ΣR<sub>compartment</sub> + ΣR<sub>membrane</sub>) + V<sub>overpotential</sub> + V<sub>watersplit</sub></div>
-        <div class="eq-desc">Each compartment's ionic conductivity <code>κ</code> comes from the same <code>λ</code>/<code>z</code>/<code>C</code> values as the transport-number calc. Resistance is <code>gap/(κ·A)</code> per compartment plus a fixed areal resistance per membrane; a depleted compartment is floored at pure water's own conductivity (not zero) so voltage rises steeply but doesn't spike to infinity. <code>V<sub>watersplit</sub></code> (eq. 8) is what actually bends the curve into a plateau once a membrane goes over-limiting — the old hardcoded ceiling below is now just a safety net, not the mechanism.</div>
+        <div class="eq-formula">κ = 0.001·Σ<sub>i</sub>(λ<sub>i</sub>(I)·|z<sub>i</sub>|·C<sub>i</sub>) &nbsp;·&nbsp; V = I·(ΣR<sub>comp</sub> + ΣR<sub>mem</sub>) + V<sub>overpotential</sub> + V<sub>watersplit</sub> + V<sub>BPM</sub></div>
+        <div class="eq-desc"><code>λ<sub>i</sub>(I)</code> now includes an ionic-strength correction (eq. 5b) — raw limiting conductivities overestimate a 0.5 M solution's conductivity by ~40%. <code>R<sub>mem</sub></code> per row is clean membrane resistance + cake fouling + mineral scale + concentration-polarization film resistance (eq. 26–27), so a fouled or scaled membrane now genuinely costs more voltage, not just a bigger fixed number.</div>
       </div>
 
       <div class="eq-card">
         <div class="eq-label">6 · pH</div>
-        <div class="eq-formula">pH = −log<sub>10</sub>(C<sub>H,eff</sub>) &nbsp;&nbsp;where&nbsp;&nbsp; C<sub>H,eff</sub> = C<sub>H</sub> − C<sub>OH</sub>, or K<sub>w</sub>/(C<sub>OH</sub> − C<sub>H</sub>)</div>
-        <div class="eq-desc">H⁺ and OH⁻ are tracked like any other migrating species (plus the electrode source terms above), then reconciled through the water equilibrium constant <code>K<sub>w</sub> = 10⁻¹⁴</code> for display. A compartment with no net H⁺/OH⁻ signal at all falls back to neutral (pH 7) rather than the misleading pH 0 a naive formula would give.</div>
+        <div class="eq-formula">C<sub>H</sub>·C<sub>OH</sub> = K<sub>w</sub> (net C<sub>H</sub>−C<sub>OH</sub> fixed) &nbsp;&nbsp;·&nbsp;&nbsp; pH = −log<sub>10</sub>(γ<sub>H</sub>·C<sub>H</sub>)</div>
+        <div class="eq-desc">Every compartment is re-speciated onto the water equilibrium every step (eq. 17), holding the net charge that transport/electrodes actually determined fixed — without this a compartment could show high H⁺ <em>and</em> high OH⁻ at once, which is chemically impossible. pH is on activity (Davies coefficient γ), not raw concentration.</div>
       </div>
 
       <div class="eq-card">
         <div class="eq-label">7 · Current efficiency vs. time (Co²⁺)</div>
         <div class="eq-formula">η<sub>Co</sub>(t) = min( n<sub>Co,C2</sub>(t) / (I·t / (z<sub>Co</sub>·F)), 1 ) × 100%</div>
-        <div class="eq-desc">Plotted on the <code>Current efficiency</code> tab. This is <em>cumulative</em>, not instantaneous: <code>n<sub>Co,C2</sub>(t)</code> is the actual moles of Co²⁺ accumulated in C2 by time <code>t</code>, and <code>I·t/(z<sub>Co</sub>·F)</code> is the theoretical maximum moles transferable if <em>every</em> electron passed so far had gone to Co²⁺ alone. It reads low early on because Ca²⁺ and Na⁺ are still competing at membrane 3 (eq. 1) — the same shared-current competition, just viewed as a running average instead of an instantaneous rate. The KPI card shows this curve's endpoint at the current run time.</div>
+        <div class="eq-desc">Cumulative, not instantaneous — see the <code>Metal recovery</code> tab for the same idea applied to all 10 metals at once.</div>
       </div>
 
       <div class="eq-card">
         <div class="eq-label">8 · Limiting current &amp; water-splitting</div>
-        <div class="eq-formula">I<sub>lim</sub> = A·Σ<sub>i</sub>(|z<sub>i</sub>|·F·D<sub>i</sub>·C<sub>i</sub>/(1000·δ)) &nbsp;&nbsp;·&nbsp;&nbsp; D<sub>i</sub> = R·T·λ<sub>i</sub> / (|z<sub>i</sub>|·F²)</div>
-        <div class="eq-desc">This is why your bench run plateaued around 10&nbsp;V instead of climbing indefinitely. Each membrane can only sustain <code>I<sub>lim</sub></code> — the Nernst diffusion-limited current set by how fast its own competing ions can reach the surface — via normal migration (eq. 1–2). Once the applied current <code>I</code> exceeds that, the shortfall <code>I − I<sub>lim</sub></code> is carried instead by water dissociating right at the membrane: for a CEM, the H⁺ produced crosses through (OH⁻ stays behind); for an AEM, OH⁻ crosses through (H⁺ stays behind). This is a real, well-known ED phenomenon ("over-limiting current") — not a numerical patch — and it's what produces <code>V<sub>watersplit</sub></code> in eq. 5: a roughly-constant added voltage per over-limiting membrane, giving the characteristic knee-then-plateau shape instead of an unbounded climb. <code>D<sub>i</sub></code> isn't a separate fitted parameter — it's derived from the same <code>λ<sub>i</sub></code> already in eq. 1 via the Nernst-Einstein relation (verified against literature: this gives D<sub>Na⁺</sub>=1.33×10⁻⁵ and D<sub>Ca²⁺</sub>=7.92×10⁻⁶ cm²/s, matching tabulated values to 3 significant figures). <code>δ</code> (boundary layer thickness) is the one genuinely placeholder value here.</div>
+        <div class="eq-formula">I<sub>lim</sub> = A·Σ<sub>i</sub>(S<sub>i</sub>·|z<sub>i</sub>|·F·D<sub>i</sub>·C<sub>i</sub>/(1000·δ<sub>eff</sub>))</div>
+        <div class="eq-desc"><code>δ<sub>eff</sub></code> is no longer one fixed number — it's the compartment's own flow-derived boundary layer (eq. 18), thickened by whatever cake and scale have deposited on that membrane (eq. 11, 27). A fouled or under-flowed membrane goes over-limiting sooner.</div>
       </div>
+    </div>
+
+    <div class="table-wrap" style="margin-top:18px">
+      <table class="datatable">
+        <thead><tr><th>Eq.</th><th>What it adds</th></tr></thead>
+        <tbody>
+          <tr><td>5b</td><td>Ionic-strength (Davies-type) correction to λ — fixes conductivity overestimate at real concentrations</td></tr>
+          <tr><td>9–11</td><td>Suspended solids: deposition onto the membrane they're driven against, cake fouling resistance + boundary-layer thickening</td></tr>
+          <tr><td>12–14</td><td>Precipitation: saturation index vs. Ksp for gypsum + 10 metal hydroxides, kinetic relaxation, bulk/surface split</td></tr>
+          <tr><td>15</td><td>Nucleation induction-time barrier — solid doesn't form the instant SI crosses zero</td></tr>
+          <tr><td>16</td><td>Dissolution when a compartment later goes undersaturated (suspended crystal first, then cake, then in-situ scale)</td></tr>
+          <tr><td>17</td><td>Water self-ionization re-speciation (closed form, every step)</td></tr>
+          <tr><td>18</td><td>Per-compartment flow → boundary layer via the Lévêque correlation (thin-channel laminar flow)</td></tr>
+          <tr><td>19–20</td><td>Electro-osmotic drag + osmosis — compartment volumes actually change over a run</td></tr>
+          <tr><td>21</td><td>N repeating units, tiled and lumped by compartment type (real multi-cell stack wiring)</td></tr>
+          <tr><td>22</td><td>Monovalent-selective membrane weighting (Mono-CEM/Mono-AEM)</td></tr>
+          <tr><td>23</td><td>Permselectivity / co-ion leakage — no real membrane is 100% selective</td></tr>
+          <tr><td>24–25</td><td>Flux decline and conductivity decline, reported per membrane/compartment over time</td></tr>
+          <tr><td>26</td><td>Concentration-polarization film resistance — smooth divergence as current nears the limit, not a step function</td></tr>
+          <tr><td>27</td><td>Fouling/scale layer resistance derived from deposit thickness and porosity, not a fitted constant</td></tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="eq-legend">
       <div><span class="term">I</span> — applied current (A, constant)</div>
       <div><span class="term">F</span> — Faraday constant, 96 485 C/mol</div>
       <div><span class="term">t</span> — elapsed simulated time (s)</div>
-      <div><span class="term">z<sub>i</sub></span> — charge number of species <code>i</code> (see z=± labels above)</div>
+      <div><span class="term">z<sub>i</sub></span> — charge number of species <code>i</code></div>
       <div><span class="term">λ<sub>i</sub></span> — limiting equivalent ionic conductivity (S·cm²/eq)</div>
       <div><span class="term">C<sub>i</sub></span> — molar concentration of species <code>i</code> (mol/L)</div>
-      <div><span class="term">n<sub>Co,C2</sub></span> — moles of Co²⁺ accumulated in compartment C2</div>
+      <div><span class="term">S<sub>i</sub></span> — monovalent-selectivity weight at this membrane (eq. 22)</div>
       <div><span class="term">η<sub>i</sub></span> — transport-number share of species <code>i</code> at a membrane</div>
       <div><span class="term">κ</span> — ionic conductivity of a compartment (S/cm)</div>
-      <div><span class="term">V</span> (context-dependent) — either stack voltage or compartment volume</div>
       <div><span class="term">K<sub>w</sub></span> — water ion product, 10⁻¹⁴ at 25°C</div>
+      <div><span class="term">γ<sub>H</sub></span> — Davies activity coefficient of H⁺</div>
       <div><span class="term">I<sub>lim</sub></span> — diffusion-limited current a membrane can sustain via migration</div>
       <div><span class="term">D<sub>i</sub></span> — diffusivity of species <code>i</code> (cm²/s), derived from λ<sub>i</sub></div>
-      <div><span class="term">δ</span> — Nernst diffusion boundary layer thickness (cm)</div>
+      <div><span class="term">δ<sub>eff</sub></span> — effective boundary layer, incl. fouling (cm)</div>
+      <div><span class="term">SI</span> — saturation index, log₁₀(IAP/Ksp)</div>
       <div><span class="term">R, T</span> — gas constant (8.314 J/mol/K), temperature (298.15 K)</div>
     </div>
   </div>
 
   <div class="footer-note">
-    <b>Model scope:</b> closed-loop batch simulation, single quad (N=1), corrected termination (both end membranes CEM — D2 at the cathode end, C1 at the anode end) to keep metal cations out of the cathode rinse and Cl⁻ out of the anode rinse.
-    Ion transport at each membrane is split between competing same-sign species by a conductivity-weighted share (Kohlrausch's law, standard limiting molar conductivities) — not a fixed efficiency constant. Electrode reactions (H2/OH⁻ at the cathode rinse, O2/H+ at the anode rinse) are modeled as Faradaic source terms.
-    Voltage is derived from a simplified compartment + membrane resistance chain (spacer gap 0.5&nbsp;cm, membrane areal resistance 5&nbsp;Ω·cm² each, fixed 1.5&nbsp;V electrode overpotential) plus an over-limiting-current / water-splitting term at interior membranes once a membrane's own ion supply can't sustain the applied current (Nernst diffusion-limited current, 50&nbsp;µm boundary layer, 0.8&nbsp;V per over-limiting membrane) — this is what produces a realistic voltage knee-then-plateau instead of an unbounded climb; see eq. 8. Resistance/overpotential magnitudes are flagged placeholders, not measured values. pH is a simplified proxy (H⁺/OH⁻ tracked as trace migrating species plus electrode and over-limiting generation, water-equilibrium clamp for display) — not a rigorous aqueous-equilibrium solver.
+    <b>Model scope:</b> this is the web port of the extended MATLAB reference model (<code>EDM_QuadStack_Simulator.m</code>), not the original simple 8-equation version — 15 species (10 metals + Na/SO4/Cl/H/OH), N-tileable stack, monovalent-selective and bipolar membrane options, precipitation/scaling chemistry, membrane fouling, and water transport are all live by default.
+    Placeholder physical constants (spacer gap, membrane areal resistance, boundary layer thickness, drag/permeability coefficients, deposit porosities, precipitation/dissolution rate constants) are unchanged from the MATLAB defaults and are flagged in that file's comments — none of them have been measured for a specific real stack. Ksp values are 25°C thermodynamic solubility products; real scaling also depends on nucleation seed availability and crystal habit, which aren't modeled.
   </div>
 </div>
 
@@ -452,112 +514,138 @@ table.datatable thead th{ color:var(--text-muted); font-weight:600; font-size:10
 /* ═══════════════════════════════════════════════════════════════
    PHYSICAL CONSTANTS
    ═══════════════════════════════════════════════════════════════ */
-const F = 96485;      // C/mol
-const Kw = 1e-14;      // water ion product, 25°C
-const R_GAS = 8.314;   // J/mol/K
-const T_KELVIN = 298.15; // 25°C -- matches the 25°C literature lambda values below
+const F = 96485;
+const Kw = 1e-14;
+const R_GAS = 8.314;
+const T_KELVIN = 298.15;
 
 /* ═══════════════════════════════════════════════════════════════
-   SPECIES — id, label, charge z, limiting equivalent ionic
-   conductivity λ° (S·cm²/eq, 25°C, standard literature values).
-   Transport-number share at a membrane ∝ |z_i| · λ_i · C_i, i.e.
-   Kohlrausch's law applied per-membrane to same-sign competitors.
-
-   D (diffusivity, cm²/s) is DERIVED from λ via the Nernst-Einstein
-   relation, D_i = R·T·λ_i / (|z_i|·F²) -- not a second independent
-   parameter. Verified against literature: this gives D_Na+ = 1.33e-5
-   cm²/s and D_Ca2+ = 7.92e-6 cm²/s from the λ values below, matching
-   standard tabulated diffusivities to 3 sig figs. Used for the
-   limiting-current / over-limiting-current model, see eq. 8.
+   SPECIES — 15: 10 metals + Na, SO4, Cl, H, OH. z, lambda (equivalent
+   ionic conductivity, S*cm^2/eq, 25C) match the MATLAB reference model.
+   D (diffusivity) derived via Nernst-Einstein: D_i = R*T*lambda_i/(|z_i|*F^2).
    ═══════════════════════════════════════════════════════════════ */
 const SPECIES = [
-  { id:'Co', label:'Co²⁺', z:2,  lambda:53.0,  color:'var(--s-co)'  },
-  { id:'Ca', label:'Ca²⁺', z:2,  lambda:59.5,  color:'var(--s-ca)'  },
-  { id:'Na', label:'Na⁺',  z:1,  lambda:50.1,  color:'var(--s-na)'  },
-  { id:'SO4',label:'SO4²⁻',z:-2, lambda:80.0,  color:'var(--s-so4)' },
-  { id:'Cl', label:'Cl⁻',  z:-1, lambda:76.3,  color:'var(--s-cl)'  },
-  { id:'H',  label:'H⁺',   z:1,  lambda:349.8, color:'var(--s-h)'   },
-  { id:'OH', label:'OH⁻',  z:-1, lambda:198.0, color:'var(--s-oh)'  },
+  { id:'Co', label:'Co²⁺',  z:2,  lambda:53.0,  color:'var(--s-co)'  },
+  { id:'Ni', label:'Ni²⁺',  z:2,  lambda:49.6,  color:'#0e7490'      },
+  { id:'Fe', label:'Fe²⁺',  z:2,  lambda:54.0,  color:'#78350f'      },
+  { id:'Al', label:'Al³⁺',  z:3,  lambda:61.0,  color:'#64748b'      },
+  { id:'Cr', label:'Cr³⁺',  z:3,  lambda:67.0,  color:'#166534'      },
+  { id:'Mn', label:'Mn²⁺',  z:2,  lambda:53.5,  color:'#9333ea'      },
+  { id:'Mg', label:'Mg²⁺',  z:2,  lambda:53.1,  color:'#65a30d'      },
+  { id:'Cu', label:'Cu²⁺',  z:2,  lambda:53.6,  color:'#c2410c'      },
+  { id:'Zn', label:'Zn²⁺',  z:2,  lambda:52.8,  color:'#0369a1'      },
+  { id:'Ca', label:'Ca²⁺',  z:2,  lambda:59.5,  color:'var(--s-ca)'  },
+  { id:'Na', label:'Na⁺',   z:1,  lambda:50.1,  color:'var(--s-na)'  },
+  { id:'SO4',label:'SO4²⁻', z:-2, lambda:80.0,  color:'var(--s-so4)' },
+  { id:'Cl', label:'Cl⁻',   z:-1, lambda:76.3,  color:'var(--s-cl)'  },
+  { id:'H',  label:'H⁺',    z:1,  lambda:349.8, color:'var(--s-h)'   },
+  { id:'OH', label:'OH⁻',   z:-1, lambda:198.0, color:'var(--s-oh)'  },
 ];
-SPECIES.forEach(sp=> sp.D = (R_GAS*T_KELVIN*sp.lambda) / (Math.abs(sp.z)*F*F));  // cm^2/s
+SPECIES.forEach(sp=> sp.D = (R_GAS*T_KELVIN*sp.lambda) / (Math.abs(sp.z)*F*F));
 const SP = Object.fromEntries(SPECIES.map(s=>[s.id,s]));
+const METAL_IDS = ['Co','Ni','Fe','Al','Cr','Mn','Mg','Cu','Zn','Ca'];
+const CONSERVED_IDS = SPECIES.filter(s=>s.id!=='H'&&s.id!=='OH').map(s=>s.id);
 
 /* ═══════════════════════════════════════════════════════════════
-   COMPARTMENTS — physical left-to-right order (cathode → anode),
-   corrected termination: D2 at the cathode end, C1 at the anode end.
+   MINERAL SCALE TABLE (eq. 12-16) — solid, cation, anion, stoichiometry,
+   Ksp (25C thermodynamic), molar mass. Matches the MATLAB reference table.
+   ═══════════════════════════════════════════════════════════════ */
+const SCALES = [
+  { name:'CaSO4·2H2O', cat:'Ca', an:'SO4', nuCat:1, nuAn:1, Ksp:3.14e-5, MW:172.17 },
+  { name:'Co(OH)2',    cat:'Co', an:'OH',  nuCat:1, nuAn:2, Ksp:5.9e-15, MW:92.95  },
+  { name:'Ni(OH)2',    cat:'Ni', an:'OH',  nuCat:1, nuAn:2, Ksp:5.5e-16, MW:92.71  },
+  { name:'Fe(OH)2',    cat:'Fe', an:'OH',  nuCat:1, nuAn:2, Ksp:4.9e-17, MW:89.86  },
+  { name:'Al(OH)3',    cat:'Al', an:'OH',  nuCat:1, nuAn:3, Ksp:3.0e-34, MW:78.00  },
+  { name:'Cr(OH)3',    cat:'Cr', an:'OH',  nuCat:1, nuAn:3, Ksp:6.3e-31, MW:103.02 },
+  { name:'Mn(OH)2',    cat:'Mn', an:'OH',  nuCat:1, nuAn:2, Ksp:1.9e-13, MW:88.95  },
+  { name:'Mg(OH)2',    cat:'Mg', an:'OH',  nuCat:1, nuAn:2, Ksp:5.6e-12, MW:58.32  },
+  { name:'Cu(OH)2',    cat:'Cu', an:'OH',  nuCat:1, nuAn:2, Ksp:2.2e-20, MW:97.56  },
+  { name:'Zn(OH)2',    cat:'Zn', an:'OH',  nuCat:1, nuAn:2, Ksp:3.0e-17, MW:99.42  },
+];
+const K_PRECIP_PER_S = 1e-3, K_DISSOL_PER_S = 5e-4;
+const SI_NUCLEATION = 0.5, TAU_NUC_REF_S = 1800;
+const SCALE_SURFACE_FRACTION = 0.30;
+const CAKE_POROSITY = 0.50, SCALE_POROSITY = 0.10;
+const R_CAKE_AREAL_FALLBACK = 20, R_SCALE_AREAL_FALLBACK = 50; // ohm*cm^2 per mg/cm^2, if not deriving
+
+/* ═══════════════════════════════════════════════════════════════
+   COMPARTMENTS — cathode, D2, C2, D1(Feed), C1, anode. D1 defaults
+   match the MATLAB feed_metals table, pre-balanced with Cl- so the
+   default feed starts electroneutral (0.1100 base + 0.1150 added = 0.2250 M).
    ═══════════════════════════════════════════════════════════════ */
 const COMPT_DEFS = [
   { id:'cathode', label:'Cathode rinse', color:'var(--c-cathode)', role:'rinse',
-    conc:{ Co:0, Ca:0, Na:0.500, SO4:0.250, Cl:0, H:1e-7, OH:1e-7 } },
+    conc:{ Na:0.500, SO4:0.250, H:1e-7, OH:1e-7 } },
   { id:'d2', label:'D2 · Solution 1 (donor)', color:'var(--c-d2)', role:'D2',
-    conc:{ Co:0, Ca:0, Na:0.500, SO4:0, Cl:0.500, H:1e-7, OH:1e-7 } },
+    conc:{ Na:0.500, Cl:0.500, H:1e-7, OH:1e-7 } },
   { id:'c2', label:'C2 · Solution 2 (Metal-Cl trap)', color:'var(--c-c2)', role:'C2',
-    conc:{ Co:0, Ca:0, Na:0.050, SO4:0, Cl:0.050, H:1e-7, OH:1e-7 } },
+    conc:{ Na:0.050, Cl:0.050, H:1e-7, OH:1e-7 } },
   { id:'d1', label:'D1 · Feed', color:'var(--c-d1)', role:'D1',
-    conc:{ Co:0.0500, Ca:0.0050, Na:0.1082, SO4:0.0541, Cl:0.1100, H:1e-7, OH:1e-7 } },
+    conc:{ Co:0.0500, Ni:0.0200, Fe:0.0040, Al:0.0020, Cr:0.0010, Mn:0.0100, Mg:0.0050,
+           Cu:0.0080, Zn:0.0060, Ca:0.0050, Na:0.1082, SO4:0.0541, Cl:0.2250, H:1e-7, OH:1e-7 } },
   { id:'c1', label:'C1 · Solution 3 (Na2SO4 trap, → BMED)', color:'var(--c-c1)', role:'C1',
-    conc:{ Co:0, Ca:0, Na:0.100, SO4:0.050, Cl:0, H:1e-7, OH:1e-7 } },
+    conc:{ Na:0.100, SO4:0.050, H:1e-7, OH:1e-7 } },
   { id:'anode', label:'Anode rinse', color:'var(--c-anode)', role:'rinse',
-    conc:{ Co:0, Ca:0, Na:0.500, SO4:0.250, Cl:0, H:1e-7, OH:1e-7 } },
+    conc:{ Na:0.500, SO4:0.250, H:1e-7, OH:1e-7 } },
 ];
+function defConcFor(id){
+  const def = COMPT_DEFS.find(d=>d.id===id);
+  const out = {};
+  SPECIES.forEach(sp=> out[sp.id] = def.conc[sp.id] || 0);
+  return out;
+}
 
-// Membranes between consecutive compartments, fixed by the corrected topology.
-const MEMBRANE_TYPES = ['CEM','AEM','CEM','AEM','CEM'];
+const DEFAULT_MEMBRANE_TYPES = ['CEM','AEM','CEM','AEM','CEM'];
+const VALID_MEM_TYPES = ['CEM','AEM','Mono-CEM','Mono-AEM','BPM'];
 
-const AREAL_R_MEMBRANE = 5;    // Ω·cm², placeholder per membrane
-const GAP_CM = 0.5;             // cm, placeholder compartment spacer thickness
-const V_OVERPOTENTIAL = 1.5;    // V, placeholder fixed electrode overpotential
-
-// ── Over-limiting current / water-splitting at interior membranes (eq. 8) ──
-// DELTA_CM sets the Nernst diffusion-boundary-layer thickness that determines
-// each membrane's limiting current density -- typical value for a
-// turbulence-promoting spacer in a bench ED/EDM cell (placeholder, not
-// measured for this specific stack).
-const DELTA_CM = 50e-4;   // cm (50 micron)
-// Once a membrane's applied current exceeds its limiting current, water
-// dissociates right at that membrane surface to carry the excess -- this is
-// what actually caps real-world stack voltage instead of it climbing
-// unbounded (see eq. 8). Modeled as a roughly-constant per-membrane
-// overpotential (activation-style, not ohmic) while a membrane is in that
-// regime -- a placeholder magnitude, but the mechanism itself (and thus the
-// resulting voltage knee-then-plateau shape) is physically real.
-const V_WATERSPLIT_OVERPOTENTIAL = 0.8;   // V, per over-limiting membrane
+/* ═══════════════════════════════════════════════════════════════
+   PLACEHOLDER PHYSICAL CONSTANTS — all unchanged from the MATLAB
+   reference model's defaults; none measured for a specific real stack.
+   ═══════════════════════════════════════════════════════════════ */
+const AREAL_R_MEMBRANE = 5;      // ohm*cm^2, clean membrane
+const GAP_CM = 0.1;               // cm, compartment spacer (1 mm)
+const V_OVERPOTENTIAL = 1.5;      // V, fixed electrode overpotential
+const KAPPA_WATER_FLOOR = 5.5e-8; // S/cm
+const V_STACK_CEILING = 200;      // V, safety-net ceiling only
+const DELTA_CM_DEFAULT = 50e-4;   // cm, fixed boundary layer when no flow set
+const V_WATERSPLIT_OVERPOTENTIAL = 0.8; // V, per over-limiting membrane
+const MONO_SELECTIVITY = 20;      // mid-range commercial mono-selective grade
+const PERMSEL = { 'CEM':0.95, 'AEM':0.92, 'Mono-CEM':0.95, 'Mono-AEM':0.92, 'BPM':1.0 };
+const V_BPM = 0.9;                // V, bipolar junction potential
+const KAPPA_B = 0.67;             // ionic-strength conductivity correction coefficient
+const CS_FLOOR = 1e-3;            // floor on c_surface/c_bulk (eq. 26)
+const N_DRAG_CEM = 6.0, N_DRAG_AEM = 4.0; // mol H2O per mol charge
+const LP_WATER = 2e-6;            // cm/s/bar, membrane water permeability
+const V_WATER_MOLAR_CM3 = 18.0;
+const MIN_VOL_FRACTION = 0.05;
+const PARTICLE_DENSITY_G_CM3 = 2.5;
+const DEPOSITION_VEL_CM_S = 1e-5;
+const SPACER_POROSITY = 0.75, KIN_VISC_CM2_S = 0.00893;
 
 /* ═══════════════════════════════════════════════════════════════
    SIMULATION STATE
    ═══════════════════════════════════════════════════════════════ */
-let state = null;      // { t, compartments:[{...,conc,vol}], I, area, history:[...] }
+let state = null;
 let initialTotals = null;
+let initialD1Metals = null;
 let running = false;
-let rafHandle = null;
+let tickTimer = null;
+let lastTickWallClock = 0;
+let watchdogInterval = null;
 let lastTickWall = 0;
-const REALTIME_MS_PER_STEP = 45;   // animation pacing
-
-function buildInitialState(){
-  const area = parseFloat(document.getElementById('cfgArea').value) || 10;
-  const I = parseFloat(document.getElementById('cfgCurrent').value) || 0;
-  const durationH = parseFloat(document.getElementById('cfgDuration').value) || 4;
-  const dtMin = parseFloat(document.getElementById('cfgDt').value) || 1;
-
-  const compartments = COMPT_DEFS.map(def=>({
-    id: def.id, label: def.label, color: def.color, role: def.role,
-    vol: getVolumeFor(def.id),
-    conc: Object.assign({}, getConcFor(def.id) || def.conc),
-  }));
-
-  return {
-    t: 0,                       // seconds
-    tEndSec: durationH*3600,
-    dtSec: dtMin*60,
-    I, area,
-    compartments,
-    history: [],                // array of snapshots {t, conc:{compId:{spId:val}}, V, I, pH:{compId:val}}
-  };
-}
+const REALTIME_MS_PER_STEP = 45;
 
 function getVolumeFor(compId){
   const el = document.getElementById('vol_'+compId);
-  return el ? (parseFloat(el.value)/1000) : 0.25; // mL -> L
+  return el ? (parseFloat(el.value)/1000) : 0.25;
+}
+function getFlowFor(compId){
+  const el = document.getElementById('flow_'+compId);
+  return el ? (parseFloat(el.value)||0) : 0; // L/min
+}
+function getTssFor(compId){
+  const el = document.getElementById('tss_'+compId);
+  return el ? (parseFloat(el.value)||0) : 0; // mg/L
 }
 function getConcFor(compId){
   const def = COMPT_DEFS.find(d=>d.id===compId);
@@ -571,173 +659,449 @@ function getConcFor(compId){
   });
   return any?out:null;
 }
+function getMembraneTypes(){
+  const types = [];
+  for(let k=0;k<5;k++){
+    const el = document.getElementById('memType'+k);
+    types.push(el ? el.value : DEFAULT_MEMBRANE_TYPES[k]);
+  }
+  return types;
+}
 
-/* ── one Faraday's-law step ──────────────────────────────────── */
+/* ── build the general membrane table: [left, right, typeCode, mult, typeStr] ──
+   typeCode: 1 = cation-conducting (CEM/Mono-CEM), 0 = anion-conducting
+   (AEM/Mono-AEM), 2 = bipolar. N=1 -> 5-row linear chain. N>1 -> the
+   6-row lumped tiling (eq. 21), fixed CEM-AEM-CEM-AEM-CEM-CEM regardless
+   of the 5 selectors (matches the MATLAB reference's own N>1 behavior). */
+function typeCode(t){ if(t==='BPM') return 2; if(t==='CEM'||t==='Mono-CEM') return 1; return 0; }
+function buildMembraneTable(N, types5){
+  // compartment indices: 0 cathode,1 d2,2 c2,3 d1,4 c1,5 anode
+  if(N<=1){
+    const rows = [];
+    for(let k=0;k<5;k++) rows.push({left:k, right:k+1, type:types5[k], code:typeCode(types5[k]), mult:1});
+    return rows;
+  }
+  const tile = ['CEM','AEM','CEM','AEM','CEM','CEM'];
+  const raw = [
+    {left:0,right:1,type:tile[0],mult:1},     // cathode|D2 terminal
+    {left:1,right:2,type:tile[1],mult:N},      // D2|C2
+    {left:2,right:3,type:tile[2],mult:N},      // C2|D1
+    {left:3,right:4,type:tile[3],mult:N},      // D1|C1
+    {left:4,right:1,type:tile[4],mult:N-1},    // C1|D2(next unit) handoff
+    {left:4,right:5,type:tile[5],mult:1},      // C1|anode terminal
+  ];
+  return raw.filter(r=>r.mult>0).map(r=>({...r, code:typeCode(r.type)}));
+}
+
+function buildInitialState(){
+  const area = parseFloat(document.getElementById('cfgArea').value) || 10;
+  const I = parseFloat(document.getElementById('cfgCurrent').value) || 0;
+  const durationH = parseFloat(document.getElementById('cfgDuration').value) || 4;
+  const dtMin = parseFloat(document.getElementById('cfgDt').value) || 1;
+  const nUnitsEl = document.getElementById('cfgNUnits');
+  const N = nUnitsEl ? Math.max(1, Math.round(parseFloat(nUnitsEl.value)||1)) : 1;
+  const scalingOn = document.getElementById('cfgScaling') ? document.getElementById('cfgScaling').checked : true;
+  const waterTransportOn = document.getElementById('cfgWaterTransport') ? document.getElementById('cfgWaterTransport').checked : true;
+
+  const compartments = COMPT_DEFS.map(def=>({
+    id: def.id, label: def.label, color: def.color, role: def.role,
+    vol: getVolumeFor(def.id),
+    conc: Object.assign({}, getConcFor(def.id) || def.conc),
+    flowLpm: getFlowFor(def.id),
+    tssMgL: getTssFor(def.id),
+  }));
+
+  const memTable = buildMembraneTable(N, getMembraneTypes());
+  const nMem = memTable.length;
+
+  // per-membrane source compartment (fed side, for boundary layer/fouling)
+  memTable.forEach(m=>{ m.source = (m.code===1) ? m.right : m.left; });
+
+  // per-compartment flow -> boundary layer (eq. 18, Leveque correlation)
+  const chanLen = Math.sqrt(area);
+  const chanWidth = area / chanLen;
+  const Axs = chanWidth * GAP_CM * SPACER_POROSITY;
+  const dh = 2*GAP_CM*SPACER_POROSITY;
+  const Dref = SP.Na.D;
+  const Sc = KIN_VISC_CM2_S / Dref;
+  compartments.forEach(c=>{
+    const Q_cm3_s = (c.flowLpm*1000/60);
+    const u = Q_cm3_s>0 ? Q_cm3_s/Axs : 0;
+    if(u<=0){ c.deltaCm = DELTA_CM_DEFAULT; return; }
+    const Re = u*dh/KIN_VISC_CM2_S;
+    const Sh = 1.85*Math.pow(Re*Sc*dh/chanLen, 1/3);
+    c.deltaCm = Math.min(dh/Math.max(Sh,1e-9), 0.5*GAP_CM);
+  });
+
+  // solids state: solidBulk[comp][scale] (mg suspended), cakeInert[mem] (mg/cm2),
+  // cakeSolid[mem][scale] (mg/cm2), scaleMem[mem][scale] (mg/cm2), indClock[comp][scale] (s)
+  const solidBulk = compartments.map(()=> SCALES.map(()=>0));
+  const cakeInert = memTable.map(()=>0);
+  const cakeSolid = memTable.map(()=> SCALES.map(()=>0));
+  const scaleMem  = memTable.map(()=> SCALES.map(()=>0));
+  const indClock  = compartments.map(()=> SCALES.map(()=>0));
+
+  return {
+    t: 0, tEndSec: durationH*3600, dtSec: dtMin*60,
+    I, area, N, scalingOn, waterTransportOn,
+    compartments, memTable,
+    solidBulk, cakeInert, cakeSolid, scaleMem, indClock,
+    overLimitFlags: memTable.map(()=>false),
+    R_bl: memTable.map(()=>0),
+    history: [],
+  };
+}
+
+/* ── Davies activity coefficients (eq. 12 support) ────────────────── */
+function activityCoeffs(concRow){
+  let Ion = 0;
+  SPECIES.forEach(sp=> Ion += 0.5*sp.z*sp.z*Math.max(concRow[sp.id],0));
+  const A = 0.509, sI = Math.sqrt(Ion);
+  const gamma = {};
+  SPECIES.forEach(sp=> gamma[sp.id] = Math.pow(10, -A*sp.z*sp.z*(sI/(1+sI) - 0.3*Ion)));
+  return gamma;
+}
+
+/* ── conductivity, with ionic-strength correction + TSS term (eq. 5, 5b) ── */
+function conductivity(concRow, tssMgL){
+  let Ion = 0;
+  SPECIES.forEach(sp=> Ion += 0.5*sp.z*sp.z*Math.max(concRow[sp.id],0));
+  const sI = Math.sqrt(Ion);
+  const corr = Math.max(1 - KAPPA_B*sI/(1+sI), 0.05);
+  let k = 0;
+  SPECIES.forEach(sp=> k += sp.lambda*corr*Math.abs(sp.z)*Math.max(concRow[sp.id],0));
+  let kappa = 0.001*k;
+  if(tssMgL>0){
+    const phi = Math.min(tssMgL/(PARTICLE_DENSITY_G_CM3*1e6), 0.6);
+    kappa = kappa*(1-phi)/(1+phi/2);
+  }
+  return kappa;
+}
+
+function phOf(cH, cOH){
+  const net = cH - cOH;
+  const disc = Math.sqrt(net*net + 4*Kw);
+  let cHeff, cOHeff;
+  if(net>=0){ cHeff = 0.5*(net+disc); cOHeff = Kw/Math.max(cHeff,1e-300); }
+  else { cOHeff = 0.5*(-net+disc); cHeff = Kw/Math.max(cOHeff,1e-300); }
+  return { cH:cHeff, cOH:cOHeff };
+}
+
+/* ── water equilibrium re-speciation (eq. 17), mutates conc in place ── */
+function waterEquilibrium(conc){
+  const { cH, cOH } = phOf(conc.H, conc.OH);
+  conc.H = cH; conc.OH = cOH;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ONE TIMESTEP (eqs. 1-4, 8-27)
+   ═══════════════════════════════════════════════════════════════ */
 function stepOnce(st){
-  const dt = st.dtSec;
-  const I = st.I;
-  const comps = st.compartments;
+  const dt = st.dtSec, I = st.I, comps = st.compartments, mem = st.memTable;
+  const molBefore = comps.map(c=> { const m={}; SPECIES.forEach(sp=> m[sp.id]=c.conc[sp.id]*c.vol); return m; });
 
-  // moles currently, per compartment/species
-  const molBefore = comps.map(c=>Object.fromEntries(SPECIES.map(sp=>[sp.id, c.conc[sp.id]*c.vol])));
+  // fouling-thickened boundary layer per membrane (eq. 9-11, 27)
+  const cakeTot = mem.map((m,k)=> st.cakeInert[k] + SCALES.reduce((s,_,j)=>s+st.cakeSolid[k][j],0));
+  const scaleTot = mem.map((m,k)=> SCALES.reduce((s,_,j)=>s+st.scaleMem[k][j],0));
+  const deltaEff = mem.map((m,k)=>{
+    const tCake  = cakeTot[k]  / (PARTICLE_DENSITY_G_CM3*(1-CAKE_POROSITY))  / 1000;
+    const tScale = scaleTot[k] / (PARTICLE_DENSITY_G_CM3*(1-SCALE_POROSITY)) / 1000;
+    return comps[m.source].deltaCm + tCake + tScale;
+  });
 
-  // membrane fluxes: mem[k] sits between comps[k] (cathode side) and comps[k+1] (anode side)
-  st.overLimitFlags = [];
-  for(let k=0;k<MEMBRANE_TYPES.length;k++){
-    const type = MEMBRANE_TYPES[k];
-    const left = comps[k], right = comps[k+1];
-    let source, destIdx, sign;
-    if(type==='CEM'){ source = right; destIdx = k; }   // cations: right -> left
-    else { source = left; destIdx = k+1; }              // AEM, anions: left -> right
-    const dest = comps[destIdx];
-    const srcIdx = comps.indexOf(source);
+  mem.forEach((m,k)=>{
+    if(m.code===2){
+      // BPM: no salt transport, full current splits water at the junction
+      const dMol = m.mult*I/F*dt;
+      molBefore[m.left].H  += dMol;
+      molBefore[m.right].OH += dMol;
+      st.overLimitFlags[k] = false;
+      st.R_bl[k] = 0;
+      return;
+    }
+    const wantSign = (m.code===1) ? 1 : -1;
+    const source = (m.code===1) ? m.right : m.left;
+    const destIdx = (m.code===1) ? m.left : m.right;
+    const carriers = SPECIES.filter(sp=> Math.sign(sp.z)===wantSign);
+    const isMono = m.type.startsWith('Mono-');
+    const sel = {}; carriers.forEach(sp=> sel[sp.id] = isMono ? Math.pow(MONO_SELECTIVITY, -(Math.abs(sp.z)-1)) : 1);
 
-    const wantSign = (type==='CEM') ? 1 : -1;
-    const carriers = SPECIES.filter(sp => Math.sign(sp.z)===wantSign);
-    let denom = 0;
-    carriers.forEach(sp=> denom += Math.abs(sp.z)*sp.lambda*Math.max(source.conc[sp.id],0));
+    const srcConc = {}; carriers.forEach(sp=> srcConc[sp.id]=Math.max(comps[source].conc[sp.id],0));
+    let denom = 0; carriers.forEach(sp=> denom += sel[sp.id]*Math.abs(sp.z)*sp.lambda*srcConc[sp.id]);
 
-    // Limiting current (eq. 8): the max current this membrane's own ion
-    // inventory can sustain via diffusion to the surface (Nernst boundary
-    // layer). denom and I_lim are zero under exactly the same condition
-    // (all carrier concentrations zero), so no separate empty-source guard
-    // is needed -- I_ionic below naturally goes to 0 and the full current
-    // routes through the water-splitting branch.
     let I_lim = 0;
-    carriers.forEach(sp=> I_lim += Math.abs(sp.z)*F*sp.D*Math.max(source.conc[sp.id],0)/1000/DELTA_CM);
+    carriers.forEach(sp=> I_lim += sel[sp.id]*Math.abs(sp.z)*F*sp.D*srcConc[sp.id]/1000/deltaEff[k]);
     I_lim *= st.area;
 
-    const overLimit = I > I_lim;
+    const alpha = PERMSEL[m.type];
+    const I_counter = alpha*I;
+    const overLimit = I_counter > I_lim;
     st.overLimitFlags[k] = overLimit;
-    const I_ionic = Math.min(I, I_lim);
+    const I_ionic = Math.min(I_counter, I_lim);
 
-    if(denom > 1e-30 && I_ionic > 1e-30){
+    // concentration polarization film resistance (eq. 26)
+    if(I_lim>1e-30){
+      const ratio = Math.min(I_counter/I_lim, 1-CS_FLOOR);
+      const x = Math.max(1-ratio, CS_FLOOR);
+      const fac = ratio<1e-9 ? 1 : (1-x)/Math.log(1/x);
+      const kap = Math.max(conductivity(comps[source].conc, comps[source].tssMgL), KAPPA_WATER_FLOOR);
+      st.R_bl[k] = deltaEff[k]/(st.area*kap) * (1/Math.max(fac,CS_FLOOR) - 1);
+    } else st.R_bl[k] = 0;
+
+    if(denom>1e-30 && I_ionic>1e-30){
       carriers.forEach(sp=>{
-        const share = (Math.abs(sp.z)*sp.lambda*Math.max(source.conc[sp.id],0)) / denom;
-        const fluxMolPerSec = share * I_ionic / (Math.abs(sp.z)*F);
-        let dMol = fluxMolPerSec * dt;
-        // Cap to what's actually available in the source THIS step. Without
-        // this, a species that fully depletes mid-step gets a flux computed
-        // from its (still-positive) start-of-step share, which can exceed
-        // what's left -- the later Math.max(...,0) clamp on write-back would
-        // then silently discard the shortfall on the source side while the
-        // destination still gets credited the full, uncapped amount: a real
-        // mass-conservation leak (caught via the mass-balance-closure KPI
-        // reading 100.27% instead of 100.00% before this fix).
-        dMol = Math.min(dMol, Math.max(molBefore[srcIdx][sp.id], 0));
-        molBefore[srcIdx][sp.id] -= dMol;
+        const share = sel[sp.id]*Math.abs(sp.z)*sp.lambda*srcConc[sp.id]/denom;
+        const fluxMolPerS = m.mult*share*I_ionic/(Math.abs(sp.z)*F);
+        let dMol = fluxMolPerS*dt;
+        dMol = Math.min(dMol, Math.max(molBefore[source][sp.id],0));
+        molBefore[source][sp.id] -= dMol;
         molBefore[destIdx][sp.id] += dMol;
       });
     }
 
-    if(overLimit){
-      // Excess current beyond I_lim is carried by water splitting right at
-      // this membrane, not by the bulk carriers above. For a CEM the newly
-      // formed H+ (a cation) crosses through to dest; OH- is left behind in
-      // source. For an AEM, OH- crosses to dest and H+ is left in source.
-      const dMolWS = ((I - I_lim)/F) * dt;
-      if(type==='CEM'){
-        molBefore[destIdx]['H']  += dMolWS;
-        molBefore[srcIdx]['OH']  += dMolWS;
-      } else {
-        molBefore[destIdx]['OH'] += dMolWS;
-        molBefore[srcIdx]['H']   += dMolWS;
+    // co-ion leakage (eq. 23): (1-alpha)*I carried the OTHER way by opposite-sign ions
+    if(alpha<1){
+      const I_co = (1-alpha)*I;
+      const srcCo = destIdx, dstCo = source;
+      const carriersCo = SPECIES.filter(sp=> Math.sign(sp.z)===-wantSign);
+      const srcConcCo = {}; carriersCo.forEach(sp=> srcConcCo[sp.id]=Math.max(comps[srcCo].conc[sp.id],0));
+      let denomCo=0; carriersCo.forEach(sp=> denomCo += Math.abs(sp.z)*sp.lambda*srcConcCo[sp.id]);
+      if(denomCo>1e-30 && I_co>1e-30){
+        carriersCo.forEach(sp=>{
+          const shareCo = Math.abs(sp.z)*sp.lambda*srcConcCo[sp.id]/denomCo;
+          const fluxCo = m.mult*shareCo*I_co/(Math.abs(sp.z)*F);
+          const dMolCo = Math.min(fluxCo*dt, Math.max(molBefore[srcCo][sp.id],0));
+          molBefore[srcCo][sp.id] -= dMolCo;
+          molBefore[dstCo][sp.id] += dMolCo;
+        });
       }
     }
+
+    if(overLimit){
+      const dMolWS = m.mult*(I_counter-I_lim)/F*dt;
+      if(m.code===1){ molBefore[destIdx].H += dMolWS; molBefore[source].OH += dMolWS; }
+      else { molBefore[destIdx].OH += dMolWS; molBefore[source].H += dMolWS; }
+    }
+  });
+
+  // electrode reactions
+  molBefore[0].OH += (I/F)*dt;
+  molBefore[comps.length-1].H += (I/F)*dt;
+
+  // water transport (eq. 19-20) -- applied to volumes before mole->conc conversion
+  if(st.waterTransportOn){
+    const dVol = comps.map(()=>0);
+    mem.forEach(m=>{
+      let src, dst, nDrag;
+      if(m.code===1){ src=m.right; dst=m.left; nDrag=N_DRAG_CEM; }
+      else if(m.code===0){ src=m.left; dst=m.right; nDrag=N_DRAG_AEM; }
+      else { src=m.left; dst=m.right; nDrag=0; }
+      const molCharge = m.mult*I/F*dt;
+      const dVdrag = nDrag*molCharge*V_WATER_MOLAR_CM3/1000;
+      let osmL=0, osmR=0;
+      SPECIES.forEach(sp=>{ osmL += Math.max(comps[m.left].conc[sp.id],0); osmR += Math.max(comps[m.right].conc[sp.id],0); });
+      const dPi = (R_GAS/100)*T_KELVIN*(osmR-osmL);
+      const dVosm = LP_WATER*m.mult*st.area*dPi*dt/1000;
+      dVol[src]-=dVdrag; dVol[dst]+=dVdrag;
+      dVol[m.left]-=dVosm; dVol[m.right]+=dVosm;
+    });
+    const volMin = comps.map(c=>MIN_VOL_FRACTION*c.vol);
+    let fscale=1;
+    comps.forEach((c,i)=>{ if(dVol[i]<0 && (c.vol+dVol[i])<volMin[i]) fscale = Math.min(fscale, Math.max(volMin[i]-c.vol,0)/(-dVol[i]||1e-30)); });
+    comps.forEach((c,i)=>{
+      const volBefore = c.vol;
+      c.vol = Math.max(c.vol + fscale*dVol[i], volMin[i]);
+      c.tssMgL = c.tssMgL * volBefore/c.vol;
+    });
   }
 
-  // electrode reactions (Faradaic source terms)
-  // cathode: 2H2O + 2e- -> H2 + 2OH-  =>  d(OH-)/dt = I/F
-  molBefore[0]['OH'] += (I/F)*dt;
-  // anode:   2H2O -> O2 + 4H+ + 4e-   =>  d(H+)/dt  = I/F
-  molBefore[comps.length-1]['H'] += (I/F)*dt;
+  comps.forEach((c,i)=>{ SPECIES.forEach(sp=> c.conc[sp.id] = Math.max(molBefore[i][sp.id]/c.vol, 0)); });
 
-  // write back concentrations, clamp at 0
-  comps.forEach((c,i)=>{
-    SPECIES.forEach(sp=>{
-      c.conc[sp.id] = Math.max(molBefore[i][sp.id]/c.vol, 0);
-    });
+  // water self-ionization (eq. 17)
+  comps.forEach(c=> waterEquilibrium(c.conc));
+
+  // solids chemistry: precipitation, nucleation barrier, dissolution (eq. 12-16)
+  if(st.scalingOn) solidsChemistry(st, dt);
+  if(st.scalingOn) comps.forEach(c=> waterEquilibrium(c.conc)); // re-impose after chemistry
+
+  // TSS deposition onto membranes (eq. 9-10) -- simple first-order settling
+  // onto the anode-side membrane of each compartment (default zeta sign -1)
+  mem.forEach((m,k)=>{
+    const c = comps[m.left]; // particle drifts anode-ward (rightward): fouls its right-side membrane
+    if(c.tssMgL<=0) return;
+    const u = 0; // per-compartment velocity not tracked post-flow-calc; use base rate
+    const depVel = DEPOSITION_VEL_CM_S/(1+u/5.0);
+    const dMassMgCm2 = c.tssMgL/1000 * depVel * dt; // mg/L * cm/s * s -> mg/cm^2 (approx, area cancels)
+    st.cakeInert[k] += dMassMgCm2;
   });
 
   st.t += dt;
 }
 
-/* ── derived quantities ──────────────────────────────────────── */
-function compartmentConductivity_S_per_cm(conc){
-  // kappa [S/cm] = 0.001 * sum( lambda_i[S cm2/eq] * |z_i| * C_i[mol/L] )
-  let k=0;
-  SPECIES.forEach(sp=> k += sp.lambda*Math.abs(sp.z)*Math.max(conc[sp.id],0));
-  return 0.001*k;
+/* ── precipitation / dissolution (eq. 12-16), bisection-solved ────── */
+function bisectExtent(f, lo, hi){
+  if(hi<=lo) return 0;
+  if(f(hi)>0) return hi;
+  for(let it=0; it<60; it++){ const mid=0.5*(lo+hi); if(f(mid)>0) lo=mid; else hi=mid; }
+  return 0.5*(lo+hi);
 }
-const KAPPA_WATER_FLOOR = 5.5e-8;   // S/cm, pure water's own intrinsic conductivity at 25degC --
-                                      // the real physical floor even once all added electrolyte is
-                                      // gone, so a depleted compartment gets a very HIGH but finite
-                                      // resistance, not the near-zero one the old "skip below a
-                                      // threshold" guard produced (that treated "no ions left" as a
-                                      // short circuit, causing an unphysical spike-then-drop in the
-                                      // voltage trace right at full depletion).
-const V_STACK_CEILING = 200;   // V, remaining safety-net ceiling -- the over-limiting/water-splitting
-                                 // mechanism (eq. 8) is what should realistically bound voltage now;
-                                 // this cap only guards against the placeholder resistance/overpotential
-                                 // constants combining into something absurd, not the primary mechanism.
-function stackVoltage(st){
-  const A = st.area;
-  let R = 0;
-  st.compartments.forEach(c=>{
-    const kappa = Math.max(compartmentConductivity_S_per_cm(c.conc), KAPPA_WATER_FLOOR);
-    R += GAP_CM/(kappa*A);
-  });
-  R += MEMBRANE_TYPES.length * (AREAL_R_MEMBRANE/A);
-  // Water-splitting overpotential (eq. 8): a roughly-constant activation-style
-  // penalty per membrane currently in over-limiting operation -- this is the
-  // term that actually produces a voltage knee-then-plateau instead of an
-  // unbounded climb once a compartment starts running low.
-  const overLimitCount = (st.overLimitFlags || []).filter(Boolean).length;
-  const V_watersplit = overLimitCount * V_WATERSPLIT_OVERPOTENTIAL;
-  return Math.min(st.I*R + V_OVERPOTENTIAL + V_watersplit, V_STACK_CEILING);
-}
-function phOf(conc){
-  const net = conc.H - conc.OH;
-  let cHeff;
-  if(net > 1e-14){
-    cHeff = net;
-  } else if(net < -1e-14){
-    cHeff = Kw / (-net);
-  } else {
-    // Both H+ and OH- at (or near) zero -- e.g. a fully-depleted compartment
-    // with no tracked acid/base signal left at all. Falling through to
-    // Kw/1e-14 here would compute pH=0 (implying strongly acidic), which is
-    // a misleading artifact, not a real result -- default to neutral instead.
-    cHeff = 1e-7;
+function solidsChemistry(st, dt){
+  const relaxP = 1-Math.exp(-K_PRECIP_PER_S*dt);
+  const relaxD = 1-Math.exp(-K_DISSOL_PER_S*dt);
+  const comps = st.compartments, mem = st.memTable;
+  for(let i=0;i<comps.length;i++){
+    const c = comps[i];
+    const memIdx = []; mem.forEach((m,k)=>{ if(m.left===i||m.right===i) memIdx.push(k); });
+    const gamma = activityCoeffs(c.conc);
+    for(let j=0;j<SCALES.length;j++){
+      const s = SCALES[j];
+      const cC = Math.max(c.conc[s.cat],0), cA = Math.max(c.conc[s.an],0);
+      const gC = gamma[s.cat], gA = gamma[s.an];
+      const rowArea = memIdx.map(k=> mem[k].mult*st.area);
+      let seedMg = st.solidBulk[i][j];
+      memIdx.forEach((k,idx)=> seedMg += st.cakeSolid[k][j]*rowArea[idx] + st.scaleMem[k][j]*rowArea[idx]);
+
+      let IAP = (cC<=0||cA<=0) ? 0 : Math.pow(gC*cC,s.nuCat)*Math.pow(gA*cA,s.nuAn);
+
+      if(IAP > s.Ksp){
+        const SI = Math.log10(IAP/s.Ksp);
+        if(seedMg<=1e-12){
+          if(SI<SI_NUCLEATION){ st.indClock[i][j]=Math.max(st.indClock[i][j]-dt,0); continue; }
+          st.indClock[i][j] += dt;
+          const tInd = TAU_NUC_REF_S/(SI*SI);
+          if(st.indClock[i][j]<tInd) continue;
+        }
+        const hi = Math.min(cC/s.nuCat, cA/s.nuAn);
+        const f = x=> Math.pow(gC*Math.max(cC-s.nuCat*x,0),s.nuCat)*Math.pow(gA*Math.max(cA-s.nuAn*x,0),s.nuAn) - s.Ksp;
+        let x = bisectExtent(f, 0, hi) * relaxP;
+        if(x<=0) continue;
+        c.conc[s.cat] = Math.max(c.conc[s.cat]-s.nuCat*x,0);
+        c.conc[s.an]  = Math.max(c.conc[s.an]-s.nuAn*x,0);
+        const newMassMg = x*c.vol*s.MW*1000;
+        if(memIdx.length===0){ st.solidBulk[i][j] += newMassMg; }
+        else{
+          const surfMass = newMassMg*SCALE_SURFACE_FRACTION;
+          const totalArea = rowArea.reduce((a,b)=>a+b,0)||1;
+          memIdx.forEach((k,idx)=> st.scaleMem[k][j] += surfMass*(rowArea[idx]/totalArea)/rowArea[idx]);
+          st.solidBulk[i][j] += (newMassMg-surfMass);
+        }
+      } else if(seedMg>1e-12){
+        st.indClock[i][j] = Math.max(st.indClock[i][j]-dt,0);
+        const maxX = seedMg/(s.MW*1000)/c.vol;
+        const g = x=> s.Ksp - Math.pow(gC*(cC+s.nuCat*x),s.nuCat)*Math.pow(gA*(cA+s.nuAn*x),s.nuAn);
+        let x = bisectExtent(g, 0, maxX) * relaxD;
+        if(x<=0) continue;
+        c.conc[s.cat] += s.nuCat*x;
+        c.conc[s.an]  += s.nuAn*x;
+        let need = x*c.vol*s.MW*1000;
+        const take0 = Math.min(need, st.solidBulk[i][j]);
+        st.solidBulk[i][j] -= take0; need -= take0;
+        for(let pass=0; pass<2 && need>0; pass++){
+          for(const k of memIdx){
+            if(need<=0) break;
+            const a = mem[k].mult*st.area;
+            if(pass===0){ const t=Math.min(need, st.cakeSolid[k][j]*a); st.cakeSolid[k][j]-=t/a; need-=t; }
+            else { const t=Math.min(need, st.scaleMem[k][j]*a); st.scaleMem[k][j]-=t/a; need-=t; }
+          }
+        }
+      } else {
+        st.indClock[i][j] = Math.max(st.indClock[i][j]-dt,0);
+      }
+    }
   }
-  return -Math.log10(Math.max(cHeff,1e-14));
 }
 
-// Cumulative Co2+ current efficiency up to a given history snapshot: how
-// much of the charge passed so far actually ended up moving Co2+ into C2,
-// vs. the theoretical maximum if 100% of that charge had gone to Co2+ alone.
-// A single shared function so the KPI card and the time-series chart can
-// never drift out of sync with each other.
+/* ═══════════════════════════════════════════════════════════════
+   VOLTAGE (eq. 5, 26, 27) — full resistance breakdown
+   ═══════════════════════════════════════════════════════════════ */
+function stackVoltage(st){
+  const comps = st.compartments, mem = st.memTable;
+  let Rcomp = 0;
+  const kappaByComp = comps.map(c=> Math.max(conductivity(c.conc, c.tssMgL), KAPPA_WATER_FLOOR));
+  comps.forEach((c,i)=> Rcomp += GAP_CM/(kappaByComp[i]*st.area));
+
+  const cakeTot = mem.map((m,k)=> st.cakeInert[k] + SCALES.reduce((s,_,j)=>s+st.cakeSolid[k][j],0));
+  const scaleTot = mem.map((m,k)=> SCALES.reduce((s,_,j)=>s+st.scaleMem[k][j],0));
+  let Rclean=0, Rcake=0, Rscale=0, Rpolar=0, nBPM=0;
+  mem.forEach((m,k)=>{
+    if(m.code===2){ nBPM += m.mult; return; }
+    Rclean += m.mult*AREAL_R_MEMBRANE/st.area;
+    const kapAt = Math.max(kappaByComp[m.source], KAPPA_WATER_FLOOR);
+    const tCake = cakeTot[k]/(PARTICLE_DENSITY_G_CM3*(1-CAKE_POROSITY))/1000;
+    const tScale = scaleTot[k]/(PARTICLE_DENSITY_G_CM3*(1-SCALE_POROSITY))/1000;
+    const rCake = tCake/Math.max(kapAt*Math.pow(CAKE_POROSITY,1.5),1e-12);
+    const rScale = tScale/Math.max(kapAt*Math.pow(SCALE_POROSITY,1.5),1e-12);
+    Rcake += m.mult*rCake/st.area;
+    Rscale += m.mult*rScale/st.area;
+    Rpolar += m.mult*st.R_bl[k];
+  });
+  const Rtot = Rcomp + Rclean + Rcake + Rscale + Rpolar;
+  const overLimitCount = st.overLimitFlags.filter(Boolean).length;
+  const Vwatersplit = overLimitCount*V_WATERSPLIT_OVERPOTENTIAL + nBPM*V_BPM;
+  const V = Math.min(st.I*Rtot + V_OVERPOTENTIAL + Vwatersplit, V_STACK_CEILING);
+  return { V, Rcomp, Rclean, Rcake, Rscale, Rpolar, Rtot, overLimitCount, nBPM };
+}
+
+/* ── cumulative per-metal current efficiency / recovery vs time ──── */
+function metalRecoveryAt(h, metalId){
+  const c2 = h.conc['c2'][metalId] * h.vol['c2'];
+  const feed0 = initialD1Metals[metalId];
+  return feed0>1e-15 ? Math.min(c2/feed0*100,100) : 0;
+}
 function coCurrentEfficiencyAt(h, I){
-  const coInC2 = h.conc['c2']['Co'] * getVolumeFor('c2');
-  const theoreticalMaxMol = (I * h.t) / (SP.Co.z * F);
-  return theoreticalMaxMol > 1e-12 ? Math.min(coInC2/theoreticalMaxMol*100, 100) : 0;
+  const coInC2 = h.conc['c2'].Co * h.vol['c2'];
+  const theoreticalMax = (I*h.t)/(SP.Co.z*F);
+  return theoreticalMax>1e-12 ? Math.min(coInC2/theoreticalMax*100,100) : 0;
 }
 
 function snapshot(st){
-  const conc = {}; const ph = {};
-  st.compartments.forEach(c=>{ conc[c.id]=Object.assign({},c.conc); ph[c.id]=phOf(c.conc); });
-  return { t: st.t, conc, ph, V: stackVoltage(st), I: st.I, overLimitFlags: (st.overLimitFlags||[]).slice() };
+  const conc={}, ph={}, vol={}, tss={};
+  st.compartments.forEach(c=>{ conc[c.id]=Object.assign({},c.conc); vol[c.id]=c.vol; tss[c.id]=c.tssMgL;
+    const {cH,cOH}=phOf(c.conc.H,c.conc.OH); const gamma=activityCoeffs(c.conc);
+    ph[c.id] = -Math.log10(Math.max(gamma.H*cH,1e-30));
+  });
+  const vres = stackVoltage(st);
+  const scaleTotals = SCALES.map((s,j)=>{
+    let present=0, formed=0, maxSI=-Infinity, worstComp='';
+    st.compartments.forEach((c,i)=>{
+      present += st.solidBulk[i][j];
+      const gamma = activityCoeffs(c.conc);
+      const cC=Math.max(c.conc[s.cat],0), cA=Math.max(c.conc[s.an],0);
+      let SI = -Infinity;
+      if(cC>0 && cA>0) SI = Math.log10(Math.pow(gamma[s.cat]*cC,s.nuCat)*Math.pow(gamma[s.an]*cA,s.nuAn)/s.Ksp);
+      if(SI>maxSI){ maxSI=SI; worstComp=c.label; }
+    });
+    st.memTable.forEach((m,k)=>{ present += st.cakeSolid[k][j]*m.mult*st.area + st.scaleMem[k][j]*m.mult*st.area; });
+    return { name:s.name, present, maxSI, worstComp };
+  });
+
+  // Moles of each species currently locked in solid form (suspended + cake
+  // + scale), stack-wide. Needed so the mass-balance check counts a
+  // precipitated ion as "still present" rather than "lost" once scaling
+  // chemistry is active -- eq. 12-16 move ions between phases, not out of
+  // the system.
+  const solidLockedMol = {}; SPECIES.forEach(sp=> solidLockedMol[sp.id]=0);
+  SCALES.forEach((s,j)=>{
+    let solidMassMg = 0;
+    st.compartments.forEach((c,i)=> solidMassMg += st.solidBulk[i][j]);
+    st.memTable.forEach((m,k)=> solidMassMg += (st.cakeSolid[k][j]+st.scaleMem[k][j]) * m.mult * st.area);
+    const molFormula = solidMassMg/1000/s.MW;
+    solidLockedMol[s.cat] += molFormula*s.nuCat;
+    solidLockedMol[s.an]  += molFormula*s.nuAn;
+  });
+
+  return { t: st.t, conc, ph, vol, tss, V: vres.V, I: st.I, overLimitFlags: st.overLimitFlags.slice(),
+    overLimitCount: vres.overLimitCount, scaleTotals, solidLockedMol, vres };
 }
 
 function totalsBySpecies(st){
-  const tot = Object.fromEntries(SPECIES.map(sp=>[sp.id,0]));
+  const tot = {}; SPECIES.forEach(sp=> tot[sp.id]=0);
   st.compartments.forEach(c=> SPECIES.forEach(sp=> tot[sp.id]+= c.conc[sp.id]*c.vol));
   return tot;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   UI — solution tabs
+   UI — solution tabs (15 species + per-compartment flow/TSS)
    ═══════════════════════════════════════════════════════════════ */
 function buildSolutionTabs(){
   const tabsEl = document.getElementById('solTabs');
@@ -746,20 +1110,13 @@ function buildSolutionTabs(){
   COMPT_DEFS.forEach((def,i)=>{
     const tab = document.createElement('button');
     tab.className='tab'; tab.textContent=shortLabel(def);
-    // Tinted background + colored text (not solid-fill + white text): some
-    // compartment colors are light even in dark mode (e.g. cathode lavender
-    // #a78bfa), and white-on-light there is nearly invisible. color-mix()
-    // against the compartment's own CSS var keeps this legible and correct
-    // in both themes without computing contrast by hand.
     const setActiveStyle = (on)=>{
       tab.dataset.active = on ? 'true':'false';
       if(on){
         tab.style.background = `color-mix(in srgb, ${def.color} 20%, transparent)`;
         tab.style.color = def.color;
         tab.style.borderColor = `color-mix(in srgb, ${def.color} 45%, transparent)`;
-      } else {
-        tab.style.background=''; tab.style.color=''; tab.style.borderColor='';
-      }
+      } else { tab.style.background=''; tab.style.color=''; tab.style.borderColor=''; }
     };
     setActiveStyle(i===0);
     tab.addEventListener('click',()=>{
@@ -781,7 +1138,7 @@ function buildSolutionTabs(){
       const inp = document.createElement('input'); inp.type='number'; inp.step='0.001'; inp.min='0';
       inp.id = 'conc_'+def.id+'_'+sp.id;
       if(sp.id==='H'||sp.id==='OH'){ inp.value='1e-7'; inp.disabled=true; inp.title='background, pH 7 — not user-editable'; }
-      else inp.value = def.conc[sp.id];
+      else inp.value = def.conc[sp.id] || 0;
       row.append(dot,lbl,z,inp);
       panel.appendChild(row);
     });
@@ -791,6 +1148,21 @@ function buildSolutionTabs(){
     const mlLbl = document.createElement('span'); mlLbl.className='hint'; mlLbl.style.margin='0 0 0 4px'; mlLbl.textContent='mL';
     volRow.append(volLbl, volInp, mlLbl);
     panel.appendChild(volRow);
+
+    const flowRow = document.createElement('div'); flowRow.className='vol-row';
+    const flowLbl = document.createElement('label'); flowLbl.textContent='Flow (eq. 18)';
+    const flowInp = document.createElement('input'); flowInp.type='number'; flowInp.id='flow_'+def.id; flowInp.value='0'; flowInp.min='0'; flowInp.step='0.1';
+    const flowUnit = document.createElement('span'); flowUnit.className='hint'; flowUnit.style.margin='0 0 0 4px'; flowUnit.textContent='L/min (0 = fixed boundary layer)';
+    flowRow.append(flowLbl, flowInp, flowUnit);
+    panel.appendChild(flowRow);
+
+    const tssRow = document.createElement('div'); tssRow.className='vol-row';
+    const tssLbl = document.createElement('label'); tssLbl.textContent='Suspended solids';
+    const tssInp = document.createElement('input'); tssInp.type='number'; tssInp.id='tss_'+def.id; tssInp.value='0'; tssInp.min='0'; tssInp.step='10';
+    const tssUnit = document.createElement('span'); tssUnit.className='hint'; tssUnit.style.margin='0 0 0 4px'; tssUnit.textContent='mg/L TSS (eq. 9-11)';
+    tssRow.append(tssLbl, tssInp, tssUnit);
+    panel.appendChild(tssRow);
+
     panelsEl.appendChild(panel);
   });
 }
@@ -802,11 +1174,6 @@ function shortLabel(def){
   if(def.id==='d1') return 'Feed → D1';
   if(def.id==='c1') return 'Sol.3 → C1';
 }
-// resolve a var(--x) string to an actual color for inline style/canvas usage.
-// Cached: this is called ~90+ times per render tick during an animated run,
-// and each cache miss costs a DOM append/remove -- uncached, that's visibly
-// janky at the 45ms/tick pace. Cache is cleared on a color-scheme change so
-// a system dark/light switch mid-session doesn't leave stale colors.
 const colorVarCache = new Map();
 function colorVar(cssVar){
   if(colorVarCache.has(cssVar)) return colorVarCache.get(cssVar);
@@ -815,19 +1182,23 @@ function colorVar(cssVar){
   colorVarCache.set(cssVar, resolved);
   return resolved;
 }
+function memColor(type){
+  if(type==='CEM') return colorVar('var(--m-cem)');
+  if(type==='AEM') return colorVar('var(--m-aem)');
+  if(type==='Mono-CEM') return colorVar('#9a3412');
+  if(type==='Mono-AEM') return colorVar('#115e59');
+  return colorVar('#7c3aed'); // BPM
+}
 
 /* ═══════════════════════════════════════════════════════════════
-   STACK SCHEMATIC (SVG)
+   STACK SCHEMATIC
    ═══════════════════════════════════════════════════════════════ */
 function renderSchematic(st){
   const boxW=150, boxH=120, gapX=20, boxY=55, svgH=225;
   const startX=90;
   const n=COMPT_DEFS.length;
   const rightEdge = startX + n*boxW + (n-1)*gapX;
-
-  // box centers-left-edges, for reuse by both box rendering and membrane positions
   const boxLeftX = COMPT_DEFS.map((_,i)=> startX + i*(boxW+gapX));
-  // membrane k (0-indexed, k=0..n-2) sits in the gap between box k and box k+1
   const membraneX = [];
   for(let k=0;k<n-1;k++) membraneX.push(boxLeftX[k]+boxW + gapX/2);
 
@@ -843,8 +1214,8 @@ function renderSchematic(st){
       SPECIES.forEach(sp=>{
         if(sp.id==='H'||sp.id==='OH') return;
         if(c.conc[sp.id] < 1e-5) return;
-        boxesSvg += `<text x="${x+boxW/2}" y="${y}" text-anchor="middle" font-size="9.5" font-family="var(--font-mono)" fill="var(--text-muted)">${sp.id} ${c.conc[sp.id].toFixed(3)}M</text>`;
-        y+=12;
+        boxesSvg += `<text x="${x+boxW/2}" y="${y}" text-anchor="middle" font-size="9" font-family="var(--font-mono)" fill="var(--text-muted)">${sp.id} ${c.conc[sp.id].toFixed(3)}M</text>`;
+        y+=11;
       });
     }
   });
@@ -855,20 +1226,20 @@ function renderSchematic(st){
   elecSvg += `<rect x="${rightEdge+30}" y="${boxY-10}" width="26" height="${boxH+20}" rx="5" fill="var(--surface-2)" stroke="var(--text-faint)" stroke-width="1.5"/>`;
   elecSvg += `<text x="${rightEdge+43}" y="${boxY+boxH+34}" text-anchor="middle" font-size="10.5" fill="var(--text-muted)">anode +</text>`;
 
-  // membranes: one bar per gap between compartments (n-1 = 5 for n=6);
-  // no membrane at the outer edges -- the two rinse compartments sit
-  // directly against the electrodes themselves.
+  // The visual schematic always shows the 6 canonical lumped compartments.
+  // For N=1 there's a 1:1 mapping to st.memTable's 5 rows. For N>1, the
+  // extra membrane copies/handoff row aren't separately drawn -- the KPI
+  // strip and snapshot table carry the full N>1 detail instead.
   let membBars='';
-  const overLimitFlags = (st && st.overLimitFlags) || [];
-  for(let i=0;i<MEMBRANE_TYPES.length;i++){
+  const types5 = (st && st.N<=1 && st.memTable.length===5) ? st.memTable.map(m=>m.type) : DEFAULT_MEMBRANE_TYPES;
+  const overLimitFlags = (st && st.N<=1) ? st.overLimitFlags : [];
+  for(let i=0;i<5;i++){
     const mx = membraneX[i];
-    const col = MEMBRANE_TYPES[i]==='CEM' ? colorVar('var(--m-cem)') : colorVar('var(--m-aem)');
+    const col = memColor(types5[i]);
     membBars += `<line x1="${mx}" y1="${boxY-6}" x2="${mx}" y2="${boxY+boxH+6}" stroke="${col}" stroke-width="4"/>`;
-    membBars += `<rect x="${mx-16}" y="${boxY-24}" width="32" height="16" rx="3" fill="${col}"/>`;
-    membBars += `<text x="${mx}" y="${boxY-12}" text-anchor="middle" font-size="9" font-weight="700" fill="white">${MEMBRANE_TYPES[i]}</text>`;
+    membBars += `<rect x="${mx-20}" y="${boxY-24}" width="40" height="16" rx="3" fill="${col}"/>`;
+    membBars += `<text x="${mx}" y="${boxY-12}" text-anchor="middle" font-size="8" font-weight="700" fill="white">${types5[i]}</text>`;
     if(overLimitFlags[i]){
-      // Over-limiting badge (eq. 8): this membrane's own ion supply can't
-      // sustain the applied current -- water-splitting is carrying the rest.
       const warnCol = colorVar('var(--warn)');
       membBars += `<circle cx="${mx}" cy="${boxY+boxH+18}" r="7" fill="${warnCol}"/>`;
       membBars += `<text x="${mx}" y="${boxY+boxH+22}" text-anchor="middle" font-size="10" font-weight="700" fill="white">!</text>`;
@@ -882,45 +1253,31 @@ function renderSchematic(st){
   </svg>`;
   document.getElementById('schemWrap').innerHTML = svg;
 
-  // topology safety badges
   const badges = document.getElementById('topoBadges');
-  const cathodeMetal = ['Co','Ca'].some(id=> (st? st.compartments[0].conc[id] : 0) > 1e-6);
+  const cathodeMetal = METAL_IDS.some(id=> (st? st.compartments[0].conc[id] : 0) > 1e-6);
   const anodeCl = st ? st.compartments[n-1].conc['Cl'] > 1e-6 : false;
   badges.innerHTML = '';
+  if(st && st.N>1) badges.innerHTML += `<span class="badge ok">N=${st.N} units, ${st.memTable.length} membrane rows</span>`;
   badges.innerHTML += badgeHtml(!cathodeMetal, cathodeMetal? 'Metal reached cathode rinse':'No metal at cathode end');
   badges.innerHTML += badgeHtml(!anodeCl, anodeCl? 'Cl⁻ reached anode rinse':'No Cl⁻ at anode end');
 }
-function badgeHtml(ok,text){
-  return `<span class="badge ${ok?'ok':'bad'}">${ok?'✓':'✗'} ${text}</span>`;
-}
+function badgeHtml(ok,text){ return `<span class="badge ${ok?'ok':'bad'}">${ok?'✓':'✗'} ${text}</span>`; }
 
 /* ═══════════════════════════════════════════════════════════════
-   CHARTS — small hand-rolled canvas line chart renderer
+   CHARTS
    ═══════════════════════════════════════════════════════════════ */
 function drawLineChart(canvas, series, opts){
   opts = opts || {};
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 600;
-  // Logical height MUST be passed in explicitly (opts.cssHeight), never read
-  // back from the canvas element itself: canvas width/height are REFLECTED
-  // IDL attributes, so getAttribute('height') mirrors whatever the .height
-  // PROPERTY was last set to -- reading either one back after this function
-  // has already overwritten it to the device-pixel backing-store size
-  // compounds on every redraw (260 -> 520 -> 1040 -> ... -> tens of
-  // thousands of px after a few hundred animation ticks).
   const cssH = opts.cssHeight || 260;
   canvas.width = cssW*dpr; canvas.height = cssH*dpr;
   canvas.style.height = cssH+'px';
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,cssW,cssH);
-
   const padL=52, padR=14, padT=14, padB=26;
   const plotW = cssW-padL-padR, plotH = cssH-padT-padB;
-
-  // Axis range must come from VISIBLE series only -- a hidden (toggled-off)
-  // series with a large value would otherwise stretch the y-axis and squash
-  // everything actually being shown into a tiny band near the bottom.
   const visibleSeries = series.filter(s=>!s.hidden);
   const allX = visibleSeries.flatMap(s=>s.points.map(p=>p.x));
   const allY = visibleSeries.flatMap(s=>s.points.map(p=>p.y));
@@ -932,59 +1289,77 @@ function drawLineChart(canvas, series, opts){
   const yPad = (yMax-yMin)*0.08;
   yMin -= yPad; yMax += yPad;
   if(opts.yMinFloor!==undefined) yMin = Math.max(yMin, opts.yMinFloor);
-
   const X = x=> padL + (x-xMin)/(xMax-xMin||1) * plotW;
   const Y = y=> padT + plotH - (y-yMin)/(yMax-yMin||1) * plotH;
-
   const muted = getComputedStyle(document.body).getPropertyValue('--text-faint').trim() || '#888';
   const border = getComputedStyle(document.body).getPropertyValue('--border').trim() || '#ccc';
   const textCol = getComputedStyle(document.body).getPropertyValue('--text-muted').trim() || '#555';
-
-  // gridlines (y)
   ctx.strokeStyle = border; ctx.lineWidth=1; ctx.font='10.5px '+getComputedStyle(document.body).fontFamily;
   ctx.fillStyle = textCol;
   const yTicks=5;
   for(let i=0;i<=yTicks;i++){
-    const yv = yMin + (yMax-yMin)*i/yTicks;
-    const yy = Y(yv);
+    const yv = yMin + (yMax-yMin)*i/yTicks; const yy = Y(yv);
     ctx.beginPath(); ctx.moveTo(padL,yy); ctx.lineTo(cssW-padR,yy); ctx.globalAlpha=0.5; ctx.stroke(); ctx.globalAlpha=1;
-    ctx.textAlign='right'; ctx.textBaseline='middle';
-    ctx.fillText(fmtAxis(yv, opts.yFmt), padL-7, yy);
+    ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText(fmtAxis(yv, opts.yFmt), padL-7, yy);
   }
-  // x ticks
   const xTicks=6;
   ctx.textAlign='center'; ctx.textBaseline='top';
   for(let i=0;i<=xTicks;i++){
-    const xv = xMin + (xMax-xMin)*i/xTicks;   // xv is already in minutes (series x is h.t/60)
-    const xx = X(xv);
+    const xv = xMin + (xMax-xMin)*i/xTicks; const xx = X(xv);
     ctx.fillText(xv.toFixed(0)+'m', xx, cssH-padB+6);
   }
-
-  // series lines
   series.forEach(s=>{
-    if(s.hidden) return;
-    if(s.points.length<2) return;
+    if(s.hidden) return; if(s.points.length<2) return;
     ctx.strokeStyle = s.color; ctx.lineWidth=2; ctx.beginPath();
-    s.points.forEach((p,i)=>{
-      const xx=X(p.x), yy=Y(p.y);
-      if(i===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy);
-    });
+    s.points.forEach((p,i)=>{ const xx=X(p.x), yy=Y(p.y); if(i===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); });
     ctx.stroke();
-    // emphasized endpoint
     const last = s.points[s.points.length-1];
-    ctx.fillStyle = s.color;
-    ctx.beginPath(); ctx.arc(X(last.x), Y(last.y), 3, 0, 7); ctx.fill();
+    ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(X(last.x), Y(last.y), 3, 0, 7); ctx.fill();
   });
-
   if(opts.zeroLine){
     ctx.strokeStyle = muted; ctx.setLineDash([3,3]); ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(padL, Y(opts.zeroLine)); ctx.lineTo(cssW-padR, Y(opts.zeroLine)); ctx.stroke();
     ctx.setLineDash([]);
   }
 }
+function drawBarChart(canvas, labels, values, colors, opts){
+  opts = opts || {};
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 600;
+  const cssH = opts.cssHeight || 300;
+  canvas.width = cssW*dpr; canvas.height = cssH*dpr;
+  canvas.style.height = cssH+'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cssW,cssH);
+  const padL=42, padR=14, padT=14, padB=32;
+  const plotW = cssW-padL-padR, plotH = cssH-padT-padB;
+  const yMax = opts.yMax!==undefined? opts.yMax : Math.max(...values,1);
+  const border = getComputedStyle(document.body).getPropertyValue('--border').trim() || '#ccc';
+  const textCol = getComputedStyle(document.body).getPropertyValue('--text-muted').trim() || '#555';
+  ctx.strokeStyle=border; ctx.fillStyle=textCol; ctx.font='10.5px '+getComputedStyle(document.body).fontFamily;
+  const yTicks=5;
+  for(let i=0;i<=yTicks;i++){
+    const yv = yMax*i/yTicks; const yy = padT+plotH-(yv/yMax)*plotH;
+    ctx.beginPath(); ctx.moveTo(padL,yy); ctx.lineTo(cssW-padR,yy); ctx.globalAlpha=0.5; ctx.stroke(); ctx.globalAlpha=1;
+    ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText((opts.yFmt==='pct01'?yv.toFixed(0)+'%':yv.toFixed(1)), padL-7, yy);
+  }
+  const n = values.length;
+  const bw = plotW/n*0.6, gap = plotW/n;
+  values.forEach((v,i)=>{
+    const x = padL + i*gap + (gap-bw)/2;
+    const h = (v/yMax)*plotH;
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(x, padT+plotH-h, bw, h);
+    ctx.fillStyle = textCol; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(labels[i], x+bw/2, cssH-padB+6);
+    ctx.textBaseline='bottom';
+    ctx.fillText(v.toFixed(0)+'%', x+bw/2, padT+plotH-h-3);
+  });
+}
 function fmtAxis(v, fmt){
-  if(fmt==='pct') return (v*100).toFixed(0)+'%';        // input is a 0..1 fraction
-  if(fmt==='pct01') return v.toFixed(0)+'%';             // input is already 0..100
+  if(fmt==='pct') return (v*100).toFixed(0)+'%';
+  if(fmt==='pct01') return v.toFixed(0)+'%';
   if(fmt==='ph') return v.toFixed(1);
   if(fmt==='v') return v.toFixed(1)+'V';
   if(Math.abs(v) < 0.001 && v!==0) return v.toExponential(1);
@@ -1010,10 +1385,6 @@ function buildLegend(el, items, groupKey){
   });
 }
 
-// Concentrations chart defaults to a small curated set visible (Co2+ in the
-// feed/product, SO4 in the feed/BMED-feed) -- everything else starts hidden,
-// togglable via the legend. Seeded ONCE (not on every render, which would
-// silently re-hide anything the user just toggled visible).
 const CONC_DEFAULT_VISIBLE = new Set(['d1:Co','c2:Co','d1:SO4','c1:SO4']);
 function seedConcHiddenDefaults(){
   hiddenSeries.conc.clear();
@@ -1033,78 +1404,77 @@ function renderCharts(){
   COMPT_DEFS.forEach(def=> SPECIES.forEach(sp=>{
     if(sp.id==='H'||sp.id==='OH') return;
     const key = def.id+':'+sp.id;
-    seriesConc.push({
-      key, color: colorVar(sp.color),
-      hidden: hiddenSeries.conc.has(key),
-      points: hist.map(h=>({x:h.t/60, y:h.conc[def.id][sp.id]}))
-    });
+    seriesConc.push({ key, color: colorVar(sp.color), hidden: hiddenSeries.conc.has(key),
+      points: hist.map(h=>({x:h.t/60, y:h.conc[def.id][sp.id]})) });
   }));
   drawLineChart(document.getElementById('chartConc'), seriesConc, {yFmt:'M', cssHeight:300});
   buildLegend(document.getElementById('legendConc'),
     COMPT_DEFS.flatMap(def=>SPECIES.filter(sp=>sp.id!=='H'&&sp.id!=='OH').map(sp=>({key:def.id+':'+sp.id,label:shortLabel(def)+' · '+sp.label,color:colorVar(sp.color)}))),
     'conc');
 
-  // Mass balance chart: % of initial total, per conserved species (Co,Ca,Na,SO4,Cl)
-  const conserved = ['Co','Ca','Na','SO4','Cl'];
-  const seriesBal = conserved.map(spId=>({
+  // Mass balance: dissolved + solid-locked moles (eq. 12-16 can move ions
+  // into a solid phase; that's not a leak, so the closure check must count
+  // them too, or scaling being ON would look like a mass-balance failure).
+  const seriesBal = CONSERVED_IDS.map(spId=>({
     key: spId, color: colorVar(SP[spId].color), hidden: hiddenSeries.balance.has(spId),
     points: hist.map(h=>{
-      const tot = COMPT_DEFS.reduce((s,def)=> s + h.conc[def.id][spId]*getVolumeFor(def.id), 0);
+      const dissolved = COMPT_DEFS.reduce((s,def)=> s + h.conc[def.id][spId]*h.vol[def.id], 0);
+      const tot = dissolved + (h.solidLockedMol ? h.solidLockedMol[spId] : 0);
       const init = initialTotals ? initialTotals[spId] : tot;
       return {x:h.t/60, y: init>1e-12 ? tot/init : 1};
     })
   }));
   drawLineChart(document.getElementById('chartBalance'), seriesBal, {yFmt:'pct', yMin:0.95, yMax:1.05, cssHeight:260});
-  buildLegend(document.getElementById('legendBalance'), conserved.map(id=>({key:id,label:SP[id].label+' (closure)',color:colorVar(SP[id].color)})), 'balance');
+  buildLegend(document.getElementById('legendBalance'), CONSERVED_IDS.map(id=>({key:id,label:SP[id].label+' (closure)',color:colorVar(SP[id].color)})), 'balance');
 
-  // Voltage & current chart
-  const seriesV = [{
-    key:'V', color: colorVar('var(--accent)'), hidden: hiddenSeries.voltage.has('V'),
-    points: hist.map(h=>({x:h.t/60, y:h.V}))
-  }];
+  const seriesV = [{ key:'V', color: colorVar('var(--accent)'), hidden: hiddenSeries.voltage.has('V'),
+    points: hist.map(h=>({x:h.t/60, y:h.V})) }];
   drawLineChart(document.getElementById('chartVoltage'), seriesV, {yFmt:'v', yMin:0, cssHeight:260});
   const legendItemsV = [
     {key:'V', label:'Stack voltage (V)', color: colorVar('var(--accent)')},
     {key:'I', label:'Current, constant '+state.I.toFixed(3)+' A', color: colorVar('var(--text-faint)')},
   ];
-  const overLimitNow = (last.overLimitFlags||[]).filter(Boolean).length;
-  if(overLimitNow > 0){
-    legendItemsV.push({key:'overlimit', label:'⚠ '+overLimitNow+' membrane(s) over-limiting -- water-splitting is adding to voltage (eq. 8)', color: colorVar('var(--warn)')});
-  }
-  if(last.V >= V_STACK_CEILING - 1e-6){
-    legendItemsV.push({key:'ceiling', label:'⚠ hit the model safety-net ceiling ('+V_STACK_CEILING+' V) -- the placeholder resistance/overpotential constants have combined into an unrealistic value; readings beyond this point aren\'t meaningful', color: colorVar('var(--crit)')});
-  }
+  const overLimitNow = last.overLimitCount||0;
+  if(overLimitNow > 0) legendItemsV.push({key:'overlimit', label:'⚠ '+overLimitNow+' membrane(s) over-limiting — water-splitting/polarisation adding to voltage (eq. 8, 26)', color: colorVar('var(--warn)')});
+  if(last.V >= V_STACK_CEILING - 1e-6) legendItemsV.push({key:'ceiling', label:'⚠ hit the model safety-net ceiling ('+V_STACK_CEILING+' V) — readings beyond this point aren\'t meaningful', color: colorVar('var(--crit)')});
   buildLegend(document.getElementById('legendVoltage'), legendItemsV, 'voltage');
 
-  // pH chart
-  const seriesPh = COMPT_DEFS.map(def=>({
-    key: def.id, color: colorVar(def.color), hidden: hiddenSeries.ph.has(def.id),
-    points: hist.map(h=>({x:h.t/60, y:h.ph[def.id]}))
-  }));
+  const seriesPh = COMPT_DEFS.map(def=>({ key: def.id, color: colorVar(def.color), hidden: hiddenSeries.ph.has(def.id),
+    points: hist.map(h=>({x:h.t/60, y:h.ph[def.id]})) }));
   drawLineChart(document.getElementById('chartPh'), seriesPh, {yFmt:'ph', yMin:0, yMax:14, cssHeight:260});
   buildLegend(document.getElementById('legendPh'), COMPT_DEFS.map(def=>({key:def.id,label:shortLabel(def),color:colorVar(def.color)})), 'ph');
 
-  // Current efficiency vs. time chart -- cumulative, not instantaneous: see
-  // eq. 7 in the Model Equations section for the formula and why cumulative
-  // (a running-average metric) is the right framing here rather than a
-  // per-timestep rate, which would be noisy and harder to act on.
-  const seriesEff = [{
-    key:'Co', color: colorVar('var(--s-co)'), hidden: hiddenSeries.efficiency.has('Co'),
-    points: hist.map(h=>({x:h.t/60, y: coCurrentEfficiencyAt(h, state.I)}))
-  }];
+  const seriesEff = [{ key:'Co', color: colorVar('var(--s-co)'), hidden: hiddenSeries.efficiency.has('Co'),
+    points: hist.map(h=>({x:h.t/60, y: coCurrentEfficiencyAt(h, state.I)})) }];
   drawLineChart(document.getElementById('chartEfficiency'), seriesEff, {yFmt:'pct01', yMin:0, yMax:100, cssHeight:260});
   buildLegend(document.getElementById('legendEfficiency'), [
     {key:'Co', label:'Co²⁺ current efficiency, cumulative (%)', color: colorVar('var(--s-co)')},
   ], 'efficiency');
 
+  // Metal recovery bar chart (all 10 metals, % of Feed recovered into C2)
+  const metalPct = METAL_IDS.map(id=> metalRecoveryAt(last, id));
+  const metalColors = METAL_IDS.map(id=> colorVar(SP[id].color));
+  drawBarChart(document.getElementById('chartMetals'), METAL_IDS, metalPct, metalColors, {yFmt:'pct01', yMax:100, cssHeight:300});
+
+  renderScalingTable(last);
   renderSnapshotTable();
   renderKpis();
+}
+
+function renderScalingTable(last){
+  const table = document.getElementById('scalingTable');
+  let html = '<thead><tr><th>Solid</th><th>Present (mg)</th><th>Max SI</th><th>Worst compartment</th></tr></thead><tbody>';
+  (last.scaleTotals||[]).forEach(s=>{
+    html += `<tr><td>${s.name}</td><td>${s.present.toFixed(3)}</td><td>${s.maxSI>-100?s.maxSI.toFixed(2):'—'}</td><td>${s.worstComp}</td></tr>`;
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
 }
 
 /* ═══════════════════════════════════════════════════════════════
    SNAPSHOT TABLE + KPIs
    ═══════════════════════════════════════════════════════════════ */
-let scrubFollowLatest = true;   // auto-track the newest step until the user drags the scrubber themselves
+let scrubFollowLatest = true;
 function renderSnapshotTable(){
   const hist = state.history;
   const scrub = document.getElementById('scrubRange');
@@ -1114,19 +1484,18 @@ function renderSnapshotTable(){
   const idx = parseInt(scrub.value,10) || 0;
   const snap = hist[idx];
   document.getElementById('scrubReadout').textContent = snap ? (snap.t/60).toFixed(0)+' min' : '0 min';
-
   const table = document.getElementById('snapshotTable');
   if(!snap){ table.innerHTML=''; return; }
   let html = '<thead><tr><th>Compartment</th>';
   SPECIES.forEach(sp=> html += `<th>${sp.label}</th>`);
-  html += '<th>pH</th></tr></thead><tbody>';
+  html += '<th>pH</th><th>Vol (mL)</th></tr></thead><tbody>';
   COMPT_DEFS.forEach(def=>{
     html += `<tr><td>${shortLabel(def)}</td>`;
     SPECIES.forEach(sp=>{
       const v = snap.conc[def.id][sp.id];
       html += `<td>${sp.id==='H'||sp.id==='OH' ? v.toExponential(2) : v.toFixed(4)}</td>`;
     });
-    html += `<td>${snap.ph[def.id].toFixed(2)}</td></tr>`;
+    html += `<td>${snap.ph[def.id].toFixed(2)}</td><td>${(snap.vol[def.id]*1000).toFixed(1)}</td></tr>`;
   });
   html += '</tbody>';
   table.innerHTML = html;
@@ -1138,43 +1507,43 @@ function renderKpis(){
   const strip = document.getElementById('kpiStrip');
   strip.innerHTML='';
 
-  // mass balance closure (worst case among conserved species)
-  const conserved = ['Co','Ca','Na','SO4','Cl'];
   let worst = 1;
-  conserved.forEach(spId=>{
-    const tot = COMPT_DEFS.reduce((s,def)=> s + last.conc[def.id][spId]*getVolumeFor(def.id), 0);
+  CONSERVED_IDS.forEach(spId=>{
+    const dissolved = COMPT_DEFS.reduce((s,def)=> s + last.conc[def.id][spId]*last.vol[def.id], 0);
+    const tot = dissolved + (last.solidLockedMol ? last.solidLockedMol[spId] : 0);
     const init = initialTotals[spId];
     if(init>1e-12){ const r = tot/init; if(Math.abs(r-1) > Math.abs(worst-1)) worst = r; }
   });
-  addKpi(strip, 'Mass balance closure', (worst*100).toFixed(2)+'%', Math.abs(worst-1)<0.01?'good':'warn', 'worst of Co/Ca/Na/SO4/Cl');
+  addKpi(strip, 'Mass balance closure', (worst*100).toFixed(2)+'%', Math.abs(worst-1)<0.01?'good':'warn', 'dissolved + solid-locked, all 13 conserved ions');
 
-  // Co recovered into C2
-  const coInC2 = last.conc['c2']['Co']*getVolumeFor('c2');
-  const coInitD1 = initialTotals['__d1_Co'];
-  const coRecPct = coInitD1>1e-12 ? (coInC2/coInitD1*100) : 0;
+  const coRecPct = metalRecoveryAt(last, 'Co');
   addKpi(strip, 'Co²⁺ recovered → C2', coRecPct.toFixed(1)+'%', coRecPct>50?'good':(coRecPct>10?'warn':''), 'vs. initial Feed Co²⁺');
 
-  // C1 product purity (Na2SO4 fraction of equivalents vs H+/Cl- contaminants)
+  const avgMetalRec = METAL_IDS.reduce((s,id)=>s+metalRecoveryAt(last,id),0)/METAL_IDS.length;
+  addKpi(strip, 'Avg. metal recovery (10)', avgMetalRec.toFixed(1)+'%', avgMetalRec>50?'good':(avgMetalRec>10?'warn':''), 'mean across all tracked metals');
+
   const c1 = last.conc['c1'];
   const wantedEq = c1.Na*1 + c1.SO4*2;
   const contamEq = c1.H*1 + c1.Cl*1;
   const purity = (wantedEq+contamEq)>1e-12 ? wantedEq/(wantedEq+contamEq)*100 : 100;
   addKpi(strip, 'C1 product purity', purity.toFixed(1)+'%', purity>95?'good':(purity>85?'warn':'crit'), 'Na2SO4 vs H⁺/Cl⁻ leak');
 
-  // cathode Na+ gain
-  const cathodeNaGain = (last.conc['cathode']['Na'] - COMPT_DEFS[0].conc.Na) * getVolumeFor('cathode') * 1000;
+  const cathodeNaGain = (last.conc['cathode']['Na'] - COMPT_DEFS[0].conc.Na) * last.vol['cathode'] * 1000;
   addKpi(strip, 'Cathode Na⁺ gained', cathodeNaGain.toFixed(2)+' mmol', '', 'sacrificial, by design');
 
-  // current efficiency for Co (cumulative Co transferred vs theoretical max) --
-  // shares coCurrentEfficiencyAt() with the "Current efficiency" chart tab so
-  // this number and that curve's endpoint can never drift apart.
   const coEff = coCurrentEfficiencyAt(last, state.I);
   addKpi(strip, 'Current efficiency, Co²⁺', coEff.toFixed(1)+'%', '', 'share of D1→C2 cation current');
 
-  // membranes currently over their limiting current (water-splitting active, eq. 8)
-  const overLimitCount = (last.overLimitFlags||[]).filter(Boolean).length;
-  addKpi(strip, 'Membranes over-limiting', overLimitCount+' / '+MEMBRANE_TYPES.length,
+  const overLimitCount = last.overLimitCount||0;
+  addKpi(strip, 'Membranes over-limiting', overLimitCount+' / '+state.memTable.length,
     overLimitCount>0?'warn':'good', overLimitCount>0 ? 'water-splitting active — see eq. 8' : 'all within diffusion limit');
+
+  const vres = last.vres || {};
+  const foulScaleV = state.I*((vres.Rcake||0)+(vres.Rscale||0));
+  addKpi(strip, 'Fouling + scale voltage', foulScaleV.toFixed(3)+' V', foulScaleV>0.5?'warn':'', 'of '+last.V.toFixed(2)+' V total (eq. 11, 27)');
+
+  const scaleFormed = (last.scaleTotals||[]).reduce((s,x)=>s+x.present,0);
+  addKpi(strip, 'Total scale/precipitate', scaleFormed.toFixed(2)+' mg', scaleFormed>10?'warn':'', 'suspended + on membranes');
 }
 function addKpi(strip, label, value, cls, sub){
   const el = document.createElement('div'); el.className='kpi';
@@ -1185,20 +1554,34 @@ function addKpi(strip, label, value, cls, sub){
 /* ═══════════════════════════════════════════════════════════════
    RUN LOOP
    ═══════════════════════════════════════════════════════════════ */
+function updateMembraneCardUI(){
+  const nEl = document.getElementById('cfgNUnits');
+  const N = nEl ? Math.max(1, Math.round(parseFloat(nEl.value)||1)) : 1;
+  const card = document.getElementById('membraneCard');
+  const h3 = card.querySelector('h3');
+  for(let k=0;k<5;k++){ const sel = document.getElementById('memType'+k); if(sel) sel.disabled = N>1; }
+  h3.textContent = N>1 ? 'Membranes (fixed tiling, N>1)' : 'Membranes (N=1 only)';
+  card.style.opacity = N>1 ? 0.55 : 1;
+}
+
 function resetSim(){
   stopRun();
   scrubFollowLatest = true;
+  updateMembraneCardUI();
   if(hiddenSeries.conc.size===0 && hiddenSeries.balance.size===0 && hiddenSeries.voltage.size===0 && hiddenSeries.ph.size===0){
     seedConcHiddenDefaults();
   }
   state = buildInitialState();
-  initialTotals = totalsBySpecies(state);
-  initialTotals['__d1_Co'] = COMPT_DEFS.find(d=>d.id==='d1').conc.Co * getVolumeFor('d1');
-  // recompute using actual user-set feed Co (in case edited)
-  const d1conc = getConcFor('d1');
-  if(d1conc) initialTotals['__d1_Co'] = d1conc.Co * getVolumeFor('d1');
 
-  state.history.push(snapshot(state));
+  // per-metal initial Feed (D1) inventory, for recovery-% denominators
+  initialD1Metals = {};
+  const d1Idx = COMPT_DEFS.findIndex(d=>d.id==='d1');
+  METAL_IDS.forEach(id=> initialD1Metals[id] = state.compartments[d1Idx].conc[id] * state.compartments[d1Idx].vol);
+
+  initialTotals = totalsBySpecies(state); // solids are exactly 0 at t=0, so dissolved-only is correct here
+
+  const snap0 = snapshot(state);
+  state.history.push(snap0);
   document.getElementById('btnRun').disabled=false;
   document.getElementById('btnPause').disabled=true;
   document.getElementById('btnRun').textContent='Run';
@@ -1208,29 +1591,35 @@ function resetSim(){
 }
 function stopRun(){
   running=false;
-  if(rafHandle) cancelAnimationFrame(rafHandle);
-  rafHandle=null;
+  if(tickTimer) clearTimeout(tickTimer); tickTimer=null;
+  if(watchdogInterval) clearInterval(watchdogInterval); watchdogInterval=null;
 }
-function tick(ts){
+function tick(){
   if(!running) return;
-  if(!lastTickWall) lastTickWall = ts;
-  if(ts - lastTickWall >= REALTIME_MS_PER_STEP){
-    lastTickWall = ts;
-    if(state.t < state.tEndSec){
-      stepOnce(state);
-      state.history.push(snapshot(state));
-      updateClock();
-      renderSchematic(state);
-      renderCharts();
-    } else {
-      running=false;
-      document.getElementById('btnRun').disabled=true;
-      document.getElementById('btnRun').textContent='Run';
-      document.getElementById('btnPause').disabled=true;
-      return;
-    }
+  lastTickWallClock = Date.now();
+  if(state.t < state.tEndSec){
+    stepOnce(state);
+    state.history.push(snapshot(state));
+    updateClock(); renderSchematic(state); renderCharts();
+    tickTimer = setTimeout(tick, REALTIME_MS_PER_STEP);
+  } else {
+    running=false;
+    document.getElementById('btnRun').disabled=true;
+    document.getElementById('btnRun').textContent='Run';
+    document.getElementById('btnPause').disabled=true;
+    if(watchdogInterval){ clearInterval(watchdogInterval); watchdogInterval=null; }
   }
-  rafHandle = requestAnimationFrame(tick);
+}
+// Watchdog: some browser/embedding contexts can stall a long setTimeout
+// chain without throwing an error (observed during testing -- a manual,
+// synchronous drive-to-completion never failed, only the timer chain did).
+// If it's been running but no tick has landed in >2s, kick it back into
+// gear rather than let the page look silently frozen.
+function startWatchdog(){
+  if(watchdogInterval) clearInterval(watchdogInterval);
+  watchdogInterval = setInterval(()=>{
+    if(running && Date.now()-lastTickWallClock > 2000) tick();
+  }, 1000);
 }
 function updateClock(){
   const mins = Math.floor(state.t/60);
@@ -1238,13 +1627,20 @@ function updateClock(){
   document.getElementById('clockReadout').textContent = String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
 }
 
+/* Timer-driven, not requestAnimationFrame-driven: this is a background
+   computation with periodic UI refresh, not a paint-synced animation, so
+   there's no reason to let it pause when the tab is backgrounded (rAF
+   throttles/suspends in hidden tabs) -- a multi-hour run should keep
+   computing while the user works in another tab. */
+
 document.getElementById('btnRun').addEventListener('click', ()=>{
   if(!state) resetSim();
-  running=true; lastTickWall=0;
+  running=true;
   document.getElementById('btnRun').textContent='Running…';
   document.getElementById('btnRun').disabled=true;
   document.getElementById('btnPause').disabled=false;
-  rafHandle = requestAnimationFrame(tick);
+  startWatchdog();
+  tick();
 });
 document.getElementById('btnPause').addEventListener('click', ()=>{
   stopRun();
@@ -1253,10 +1649,7 @@ document.getElementById('btnPause').addEventListener('click', ()=>{
   document.getElementById('btnPause').disabled=true;
 });
 document.getElementById('btnReset').addEventListener('click', resetSim);
-document.getElementById('scrubRange').addEventListener('input', ()=>{
-  scrubFollowLatest = false;   // user took manual control of the time scrubber
-  renderSnapshotTable();
-});
+document.getElementById('scrubRange').addEventListener('input', ()=>{ scrubFollowLatest = false; renderSnapshotTable(); });
 
 document.getElementById('chartTabs').addEventListener('click', (e)=>{
   const btn = e.target.closest('.chart-tab'); if(!btn) return;
@@ -1267,16 +1660,18 @@ document.getElementById('chartTabs').addEventListener('click', (e)=>{
   renderCharts();
 });
 
-['cfgArea','cfgCurrent','cfgFlow','cfgDuration','cfgDt'].forEach(id=>{
-  document.getElementById(id).addEventListener('change', resetSim);
+['cfgArea','cfgCurrent','cfgDuration','cfgDt','cfgNUnits','cfgScaling','cfgWaterTransport'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', resetSim);
 });
+for(let k=0;k<5;k++){ const sel=document.getElementById('memType'+k); if(sel) sel.addEventListener('change', resetSim); }
+document.getElementById('cfgNUnits').addEventListener('change', updateMembraneCardUI);
 
 /* ═══════════════════════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════════════════════ */
 buildSolutionTabs();
 document.querySelectorAll('.tab-panel input').forEach(inp=> inp.addEventListener('change', resetSim));
-document.querySelectorAll('.tab').forEach((t,i)=>{ if(i===0){} });
 resetSim();
 
 })();
