@@ -5,7 +5,7 @@ session checkpoint ("save this session") so any machine can `git pull` and
 resume with full context — this repo has no dependency on ARWA or its
 memory system.
 
-**Last updated:** 2026-09-09.
+**Last updated:** 2026-09-15.
 
 ## Overview
 
@@ -50,11 +50,15 @@ The project went through two design generations:
   across every KPI (mass balance, recovery, purity, current efficiency,
   voltage, full 9-solid scaling table to 3 decimal places). Features: live
   animated stack schematic (per-compartment species concentrations), an
-  equations documentation section (all 27 equations as full formula+
-  description cards), current-efficiency / mass-balance / voltage /
-  scaling charts, topology safety badges (flags trace metal reaching
-  cathode rinse or Cl⁻ reaching anode rinse — a real, small-magnitude
-  consequence of co-ion leakage physics, not a bug).
+  equations documentation section (all 27 equations as label + formula
+  cards — no per-card descriptions, by explicit user request; a symbol
+  legend below the cards is the only explanatory text left), a KPI
+  dashboard (mass balance, Co²⁺ and Ni²⁺ recovery, avg. metal recovery,
+  C1 purity, current efficiency, fouling/scale voltage, etc.),
+  current-efficiency / mass-balance / voltage / scaling charts, topology
+  safety badges (flags trace metal reaching cathode rinse or Cl⁻ reaching
+  anode rinse — a real, small-magnitude consequence of co-ion leakage
+  physics, not a bug).
 - **Live deployment**: **https://arwa-edm-sim.web.app** (Firebase Hosting,
   multi-site target `arwa` under GCP project `edm-sim-hosting`, free
   `.web.app` subdomain — no custom domain purchased). Deploy source is
@@ -70,7 +74,25 @@ The project went through two design generations:
   Left in place for reference; not part of the active design. See
   `v1-cem-cation-model` git tag for the state at which this was parked.
 
-## Latest session's changes (2026-09-09)
+## Latest session's changes (2026-09-15)
+
+- Stripped all explanatory text out of the Model Equations section: the
+  intro paragraph under the "Model equations" heading, all 22 per-card
+  `eq-desc` blocks (the 8 original + 14 added last session), and the
+  trailing "Model scope" disclaimer note. Each of the 22 cards now shows
+  only its label and formula; the symbol legend was kept since it's now
+  the sole explanation of what each symbol means. Also removed the hint
+  line under the Chemistry Options toggles ("Both default on, matching
+  the MATLAB reference model...").
+- Added an **"Ni²⁺ recovered → C2"** KPI tile to the dashboard, next to
+  the existing Co²⁺ one — same `metalRecoveryAt()` helper already used
+  for the 10-metal average, just applied to `'Ni'`.
+- Deployed both changes to the live Firebase site
+  (https://arwa-edm-sim.web.app) — confirmed live via a fresh page load
+  (0 `eq-desc`/`eq-intro`/`footer-note` nodes, 22 eq-cards intact, Ni KPI
+  present in the strip).
+
+## Previous session's changes (2026-09-09)
 
 - Ported the full extended MATLAB model (27 equations / 15 species / 10
   metals, up from the original 8 equations / 2 metals) into the web app —
