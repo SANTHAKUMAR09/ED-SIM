@@ -325,6 +325,12 @@ canvas.barchart{ width:100%; display:block; }
         <h3>Chemistry options</h3>
         <div class="chem-toggle-row"><input type="checkbox" id="cfgScaling" checked><label for="cfgScaling">Precipitation / scaling chemistry (eq. 12–16)</label></div>
         <div class="chem-toggle-row"><input type="checkbox" id="cfgWaterTransport" checked><label for="cfgWaterTransport">Water transport — osmosis + electro-osmotic drag (eq. 19–20)</label></div>
+        <div class="field-row"><label>Acid anion (pH dosing)</label>
+          <select id="cfgPhAcidAnion">
+            <option value="Cl">Cl⁻ (HCl)</option>
+            <option value="SO4" selected>SO4²⁻ (H2SO4)</option>
+          </select>
+        </div>
       </div>
 
       <div class="card">
@@ -719,13 +725,22 @@ function getConcFor(compId){
   const H0 = Math.pow(10, -getPh0For(compId));
   const OH0 = Kw/H0;
   out.H = H0; out.OH = OH0;
-  // Acid/base is a dosed reagent, so it brings a counter-ion along: HCl adds
-  // Cl-, NaOH adds Na+ -- keeps a non-neutral start electroneutral instead of
-  // just materializing bare H+/OH- (eq. "pH0" in the MATLAB reference model).
-  // Always on -- there is no UI toggle for this.
+  // Acid/base is a dosed reagent, so it brings a counter-ion along -- keeps a
+  // non-neutral start electroneutral instead of just materializing bare
+  // H+/OH- (eq. "pH0" in the MATLAB reference model). Always on -- there is
+  // no toggle for this, only which acid (its anion) is used below 7; above 7
+  // is always NaOH (Na+, z=1). The anion is user-selectable (default SO4^2-
+  // for H2SO4, or Cl- for HCl) since nothing chemistry-wise ties pH dosing to
+  // one specific acid -- moles added are net eq/L divided by |charge|, so a
+  // divalent anion like SO4^2- correctly takes half the moles Cl- would.
   const net = H0 - OH0; // eq/L excess acid (+) or base (-)
-  if(net > 1e-9) out.Cl = (out.Cl||0) + net;
-  else if(net < -1e-9) out.Na = (out.Na||0) + (-net);
+  if(net > 1e-9){
+    const anionId = (document.getElementById('cfgPhAcidAnion')||{}).value || 'SO4';
+    const anionSp = SPECIES.find(sp=>sp.id===anionId) || SPECIES.find(sp=>sp.id==='SO4');
+    out[anionSp.id] = (out[anionSp.id]||0) + net/Math.abs(anionSp.z);
+  } else if(net < -1e-9){
+    out.Na = (out.Na||0) + (-net);
+  }
   return any?out:null;
 }
 function getMembraneTypes(){
@@ -1172,7 +1187,9 @@ function totalsBySpecies(st){
 /* ═══════════════════════════════════════════════════════════════
    UI — solution tabs (15 species + per-compartment flow/TSS)
    ═══════════════════════════════════════════════════════════════ */
+const phHintUpdatersForAnionChange = [];
 function buildSolutionTabs(){
+  phHintUpdatersForAnionChange.length = 0;
   const tabsEl = document.getElementById('solTabs');
   const panelsEl = document.getElementById('solPanels');
   tabsEl.innerHTML=''; panelsEl.innerHTML='';
@@ -1222,13 +1239,18 @@ function buildSolutionTabs(){
       const OH0 = Kw/H0;
       const net = H0 - OH0; // eq/L excess acid (+) or base (-)
       let doseTxt = '';
-      if(Math.abs(net)>1e-9){
-        doseTxt = net>0 ? `, dosing +${(net*1000).toFixed(3)} mM Cl⁻` : `, dosing +${(-net*1000).toFixed(3)} mM Na⁺`;
+      if(net > 1e-9){
+        const anionId = (document.getElementById('cfgPhAcidAnion')||{}).value || 'SO4';
+        const anionSp = SPECIES.find(sp=>sp.id===anionId) || SPECIES.find(sp=>sp.id==='SO4');
+        doseTxt = `, dosing +${(net*1000/Math.abs(anionSp.z)).toFixed(3)} mM ${anionSp.label}`;
+      } else if(net < -1e-9){
+        doseTxt = `, dosing +${(-net*1000).toFixed(3)} mM Na⁺`;
       }
       phHint.textContent = `[H⁺] ${H0.toExponential(2)} M, [OH⁻] ${OH0.toExponential(2)} M${doseTxt}`;
     };
     phInp.addEventListener('input', updatePhHint);
     updatePhHint();
+    phHintUpdatersForAnionChange.push(updatePhHint);
     phRow.append(phLbl, phInp, phHint);
     panel.appendChild(phRow);
 
@@ -1757,10 +1779,11 @@ document.getElementById('chartTabs').addEventListener('click', (e)=>{
   renderCharts();
 });
 
-['cfgArea','cfgCurrent','cfgDuration','cfgDt','cfgNUnits','cfgScaling','cfgWaterTransport'].forEach(id=>{
+['cfgArea','cfgCurrent','cfgDuration','cfgDt','cfgNUnits','cfgScaling','cfgWaterTransport','cfgPhAcidAnion'].forEach(id=>{
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', resetSim);
 });
+document.getElementById('cfgPhAcidAnion').addEventListener('change', ()=> phHintUpdatersForAnionChange.forEach(fn=>fn()));
 for(let k=0;k<5;k++){ const sel=document.getElementById('memType'+k); if(sel) sel.addEventListener('change', resetSim); }
 document.getElementById('cfgNUnits').addEventListener('change', updateMembraneCardUI);
 

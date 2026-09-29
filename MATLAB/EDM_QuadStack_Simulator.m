@@ -174,12 +174,16 @@ p.pH0   = 7 * ones(1, p.nComp);
 p.H0_M  = [];
 p.OH0_M = [];
 
-%  Acid/base is a dosed reagent, so it brings a counter-ion with it: HCl
-%  adds Cl-, NaOH adds Na+. With this on (default), each compartment is
-%  topped up so an acidic/basic start is still electroneutral. Turn off to
-%  add bare H+/OH- (you will get charge-imbalance warnings).
+%  Acid/base is a dosed reagent, so it brings a counter-ion with it: H2SO4
+%  adds SO4(2-) (2 mol H+ per mol SO4(2-)), HCl adds Cl-, NaOH adds Na+.
+%  With this on (default), each compartment is topped up so an acidic/basic
+%  start is still electroneutral. Turn off to add bare H+/OH- (you will get
+%  charge-imbalance warnings). PH_ACID_ANION is not tied to one specific
+%  acid -- set it to whichever anion your actual acid is (its charge is
+%  read from sp_z, so a divalent anion like SO4 correctly takes half the
+%  moles a monovalent one like Cl would for the same eq/L of acid).
 p.PH_DOSE_COUNTERION = true;
-p.PH_ACID_ANION      = 'Cl';   % anion added with excess H+   (e.g. 'SO4')
+p.PH_ACID_ANION      = 'SO4';  % anion added with excess H+   (e.g. 'Cl')
 p.PH_BASE_CATION     = 'Na';   % cation added with excess OH-
 
 %── Membranes: fixed by the corrected topology, between consecutive comps ─
