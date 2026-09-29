@@ -310,7 +310,6 @@ canvas.barchart{ width:100%; display:block; }
         <div class="field-row"><label>Duration (h)</label><input type="number" id="cfgDuration" value="4" min="0.1" step="0.5"></div>
         <div class="field-row"><label>Timestep (min)</label><input type="number" id="cfgDt" value="1" min="0.1" step="0.5"></div>
         <div class="field-row"><label>Repeating units (N)</label><input type="number" id="cfgNUnits" value="1" min="1" step="1"></div>
-        <div class="hint">N=1 uses the 5 membrane types below as-is. N&gt;1 tiles a fixed CEM-AEM-CEM-AEM-CEM-CEM sequence (matching real multi-cell stack wiring) and the 5 selectors below no longer apply — see eq. 21.</div>
       </div>
 
       <div class="card" id="membraneCard">
@@ -320,7 +319,6 @@ canvas.barchart{ width:100%; display:block; }
         <div class="mem-row"><span class="mem-label">M3 · C2 | D1</span><select id="memType2"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
         <div class="mem-row"><span class="mem-label">M4 · D1 | C1</span><select id="memType3"><option value="AEM" selected>AEM</option><option value="Mono-AEM">Mono-AEM</option><option value="BPM">BPM</option></select></div>
         <div class="mem-row"><span class="mem-label">M5 · C1 | Anode</span><select id="memType4"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
-        <div class="hint">Mono-CEM/Mono-AEM reject multivalent counter-ions (eq. 22) — use to bleed off Na⁺ while holding back metals. BPM carries no salt at all; it splits water in place (eq. "BPM"), costing an extra ~0.9 V junction potential per copy.</div>
       </div>
 
       <div class="card">
