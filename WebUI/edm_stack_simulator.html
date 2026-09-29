@@ -325,7 +325,6 @@ canvas.barchart{ width:100%; display:block; }
         <h3>Chemistry options</h3>
         <div class="chem-toggle-row"><input type="checkbox" id="cfgScaling" checked><label for="cfgScaling">Precipitation / scaling chemistry (eq. 12–16)</label></div>
         <div class="chem-toggle-row"><input type="checkbox" id="cfgWaterTransport" checked><label for="cfgWaterTransport">Water transport — osmosis + electro-osmotic drag (eq. 19–20)</label></div>
-        <div class="chem-toggle-row"><input type="checkbox" id="cfgPhDoseCounterion" checked><label for="cfgPhDoseCounterion">Dose acid/base counter-ion (Cl⁻/Na⁺) for a non-neutral Initial pH</label></div>
       </div>
 
       <div class="card">
@@ -723,13 +722,10 @@ function getConcFor(compId){
   // Acid/base is a dosed reagent, so it brings a counter-ion along: HCl adds
   // Cl-, NaOH adds Na+ -- keeps a non-neutral start electroneutral instead of
   // just materializing bare H+/OH- (eq. "pH0" in the MATLAB reference model).
-  const doseEl = document.getElementById('cfgPhDoseCounterion');
-  const dose = doseEl ? doseEl.checked : true;
-  if(dose){
-    const net = H0 - OH0; // eq/L excess acid (+) or base (-)
-    if(net > 1e-9) out.Cl = (out.Cl||0) + net;
-    else if(net < -1e-9) out.Na = (out.Na||0) + (-net);
-  }
+  // Always on -- there is no UI toggle for this.
+  const net = H0 - OH0; // eq/L excess acid (+) or base (-)
+  if(net > 1e-9) out.Cl = (out.Cl||0) + net;
+  else if(net < -1e-9) out.Na = (out.Na||0) + (-net);
   return any?out:null;
 }
 function getMembraneTypes(){
@@ -1176,12 +1172,10 @@ function totalsBySpecies(st){
 /* ═══════════════════════════════════════════════════════════════
    UI — solution tabs (15 species + per-compartment flow/TSS)
    ═══════════════════════════════════════════════════════════════ */
-const phHintUpdaters = [];
 function buildSolutionTabs(){
   const tabsEl = document.getElementById('solTabs');
   const panelsEl = document.getElementById('solPanels');
   tabsEl.innerHTML=''; panelsEl.innerHTML='';
-  phHintUpdaters.length = 0;
   COMPT_DEFS.forEach((def,i)=>{
     const tab = document.createElement('button');
     tab.className='tab'; tab.textContent=shortLabel(def);
@@ -1226,18 +1220,15 @@ function buildSolutionTabs(){
       const pH0v = parseFloat(phInp.value);
       const H0 = Math.pow(10, -(isFinite(pH0v)?pH0v:7));
       const OH0 = Kw/H0;
-      const doseEl = document.getElementById('cfgPhDoseCounterion');
-      const dose = doseEl ? doseEl.checked : true;
       const net = H0 - OH0; // eq/L excess acid (+) or base (-)
       let doseTxt = '';
-      if(dose && Math.abs(net)>1e-9){
+      if(Math.abs(net)>1e-9){
         doseTxt = net>0 ? `, dosing +${(net*1000).toFixed(3)} mM Cl⁻` : `, dosing +${(-net*1000).toFixed(3)} mM Na⁺`;
       }
       phHint.textContent = `[H⁺] ${H0.toExponential(2)} M, [OH⁻] ${OH0.toExponential(2)} M${doseTxt}`;
     };
     phInp.addEventListener('input', updatePhHint);
     updatePhHint();
-    phHintUpdaters.push(updatePhHint);
     phRow.append(phLbl, phInp, phHint);
     panel.appendChild(phRow);
 
@@ -1766,11 +1757,10 @@ document.getElementById('chartTabs').addEventListener('click', (e)=>{
   renderCharts();
 });
 
-['cfgArea','cfgCurrent','cfgDuration','cfgDt','cfgNUnits','cfgScaling','cfgWaterTransport','cfgPhDoseCounterion'].forEach(id=>{
+['cfgArea','cfgCurrent','cfgDuration','cfgDt','cfgNUnits','cfgScaling','cfgWaterTransport'].forEach(id=>{
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', resetSim);
 });
-document.getElementById('cfgPhDoseCounterion').addEventListener('change', ()=> phHintUpdaters.forEach(fn=>fn()));
 for(let k=0;k<5;k++){ const sel=document.getElementById('memType'+k); if(sel) sel.addEventListener('change', resetSim); }
 document.getElementById('cfgNUnits').addEventListener('change', updateMembraneCardUI);
 
