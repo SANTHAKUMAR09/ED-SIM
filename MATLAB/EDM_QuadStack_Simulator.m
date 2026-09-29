@@ -14,8 +14,15 @@ function R = EDM_QuadStack_Simulator(cfg_ov, make_plots)
 %% ║  longer reproduces the web tool's numbers, even at N=1 with the    ║
 %% ║  Co/Ca-only feed -- eq. 5 (conductivity), eq. 6 (pH), and the      ║
 %% ║  default I_A/GAP_CM values have all changed. If the web tool is    ║
-%% ║  updated to match, note that fact there; until then treat the two  ║
+%% ║  updated to match, note that fact here; until then treat the two   ║
 %% ║  as independent models built on a shared lineage, not equivalent.  ║
+%% ╠══════════════════════════════════════════════════════════════════╣
+%% ║  LATEST ADDITION: configurable initial H+/OH- per compartment      ║
+%% ║  (cfg.pH0, or cfg.H0_M/cfg.OH0_M directly) instead of a hard-wired  ║
+%% ║  pH 7 everywhere. Dosing an acid/base brings its counter-ion along  ║
+%% ║  (PH_DOSE_COUNTERION, default on) so the start stays electroneutral.║
+%% ║  See the "Initial H+ / OH-" config block below for details. Not yet ║
+%% ║  ported to the web tool -- see PROJECT_STATUS.md.                   ║
 %% ╠══════════════════════════════════════════════════════════════════╣
 %% ║  COMPARTMENTS (order): cathode, D2, C2, D1(Feed), C1, anode         ║
 %% ║  MEMBRANES (order, between consecutive compartments): CEM,AEM,CEM,AEM,CEM ║
@@ -110,8 +117,8 @@ p.nComp = 6;
 % shift a column. Anything not named below starts at 0.
 % Values are unchanged from the WebUI defaults.
 p.conc0 = zeros(p.nComp, p.nSp);
-p.conc0(:, p.iH)  = 1e-7;                                    % neutral water
-p.conc0(:, p.iOH) = 1e-7;
+% H+ and OH- are NOT set here any more -- see the "Initial H+ / OH-" block
+% below (p.pH0, p.H0_M, p.OH0_M), which sets them per compartment.
 p.conc0(1, [p.iNa p.iSO4])                   = [0.500 0.250];  % cathode rinse, 0.25 M Na2SO4
 p.conc0(2, [p.iNa p.iCl])                    = [0.500 0.500];  % D2, 0.5 M NaCl donor
 p.conc0(3, [p.iNa p.iCl])                    = [0.050 0.050];  % C2, 0.05 M NaCl seed
@@ -140,6 +147,40 @@ p.FEED_BALANCE_ANION = 'Cl';   % anion topped up to charge-balance D1. Set to
                                 % to skip balancing (the electroneutrality
                                 % check below then warns instead).
 p.vol_L = 0.250 * ones(p.nComp,1);   % L, 250 mL each
+
+%── Initial H+ / OH- (adjustable per compartment) ────────────────────────
+%  Previously every compartment started with the same hard-wired
+%  [H+] = [OH-] = 1e-7 M. Now each compartment can start at its own acidity.
+%  Compartment order: cathode, D2, C2, D1(Feed), C1, anode.
+%
+%  Easiest: give a starting pH (scalar = all compartments, or one per comp):
+%       cfg.pH0 = [7 7 7 2 7 7];            % acidic feed
+%       cfg.pH0 = 3;                         % everything at pH 3
+%  [OH-] then follows from water equilibrium, [OH-] = Kw/[H+].
+%
+%  Advanced: set the concentrations directly (mol/L, scalar or per comp).
+%  Either one alone is enough -- the other is derived from Kw. If you give
+%  BOTH and they violate C_H*C_OH = Kw, they cannot coexist while
+%  ENFORCE_WATER_EQUILIBRIUM is on: the model keeps the NET (C_H - C_OH)
+%  and re-speciates, and warns you what it ended up with.
+%       cfg.H0_M  = [1e-7 1e-7 1e-7 1e-2 1e-7 1e-7];
+%       cfg.OH0_M = [1e-3 1e-7 1e-7 1e-7 1e-7 1e-7];   % basic cathode rinse
+%  H0_M / OH0_M, when non-empty, take priority over pH0.
+%
+%  These are concentrations, not activities (pH0 -> [H+] = 10^-pH0).
+%  The pH the model REPORTS is activity-based, so it can read ~0.1-0.2 units
+%  off the pH0 you typed at high ionic strength.
+p.pH0   = 7 * ones(1, p.nComp);
+p.H0_M  = [];
+p.OH0_M = [];
+
+%  Acid/base is a dosed reagent, so it brings a counter-ion with it: HCl
+%  adds Cl-, NaOH adds Na+. With this on (default), each compartment is
+%  topped up so an acidic/basic start is still electroneutral. Turn off to
+%  add bare H+/OH- (you will get charge-imbalance warnings).
+p.PH_DOSE_COUNTERION = true;
+p.PH_ACID_ANION      = 'Cl';   % anion added with excess H+   (e.g. 'SO4')
+p.PH_BASE_CATION     = 'Na';   % cation added with excess OH-
 
 %── Membranes: fixed by the corrected topology, between consecutive comps ─
 %  Five selectable membrane types. Pick them to suit what the stack is FOR:
@@ -831,6 +872,63 @@ if ~(numel(p.scale_Ksp)==p.nScale && numel(p.scale_MW)==p.nScale && ...
     error('EDM:scaleTableSize','Scaling table columns have inconsistent lengths.');
 end
 
+%── Resolve initial H+ / OH- per compartment ────────────────────────────
+% Runs after the overrides so cfg.pH0 / cfg.H0_M / cfg.OH0_M always win, and
+% before feed_metals so the D1 charge balance below sees the acid/base too.
+expandC = @(v,nm) local_expand_(v, p.nComp, nm);
+haveH  = ~isempty(p.H0_M);
+haveOH = ~isempty(p.OH0_M);
+if haveOH; OHin = expandC(p.OH0_M,'OH0_M'); end
+if haveH
+    H0 = expandC(p.H0_M,'H0_M');
+elseif haveOH
+    H0 = p.Kw ./ max(OHin, realmin);
+else
+    H0 = 10 .^ (-expandC(p.pH0,'pH0'));
+end
+if haveOH; OH0 = OHin; else; OH0 = p.Kw ./ max(H0, realmin); end
+if any(H0 <= 0) || any(OH0 <= 0)
+    error('EDM:hoh','Initial H+ and OH- must be > 0 (use a tiny value, not 0).');
+end
+p.conc0(:, p.iH)  = H0(:);
+p.conc0(:, p.iOH) = OH0(:);
+
+if p.ENFORCE_WATER_EQUILIBRIUM
+    eqc = waterEquilibrium_EDM(p.conc0, p);
+    for i = 1:p.nComp
+        if abs(log10(H0(i)*OH0(i)/p.Kw)) > 0.005      % >~1% off Kw
+            warning('EDM:hohNotAtEquilibrium', ...
+                ['%s: [H+]=%.3g and [OH-]=%.3g give C_H*C_OH = %.2g, not Kw = %.2g. ' ...
+                 'They cannot coexist; keeping the net and re-speciating to ' ...
+                 '[H+]=%.3g, [OH-]=%.3g (pH %.2f).'], ...
+                p.comp_label{i}, H0(i), OH0(i), H0(i)*OH0(i), p.Kw, ...
+                eqc(i,p.iH), eqc(i,p.iOH), -log10(eqc(i,p.iH)));
+        end
+    end
+    p.conc0(:, [p.iH p.iOH]) = eqc(:, [p.iH p.iOH]);
+end
+p.pH_initial = -log10(p.conc0(:, p.iH))';
+
+% Counter-ion for the acid/base, so the start is electroneutral.
+p.phDosed_M = zeros(p.nComp, 1);
+if p.PH_DOSE_COUNTERION
+    ja = find(strcmp(p.sp_id, p.PH_ACID_ANION),  1);
+    jc = find(strcmp(p.sp_id, p.PH_BASE_CATION), 1);
+    if isempty(ja) || isempty(jc)
+        error('EDM:phDose','PH_ACID_ANION / PH_BASE_CATION must be species in sp_id.');
+    end
+    for i = 1:p.nComp
+        net = p.conc0(i,p.iH) - p.conc0(i,p.iOH);     % eq/L of excess acid (+) or base (-)
+        if net > 1e-9
+            p.conc0(i,ja) = p.conc0(i,ja) + net/abs(p.sp_z(ja));
+            p.phDosed_M(i) = net;
+        elseif net < -1e-9
+            p.conc0(i,jc) = p.conc0(i,jc) + (-net)/abs(p.sp_z(jc));
+            p.phDosed_M(i) = net;
+        end
+    end
+end
+
 %── feed_metals shortcut: drop metals straight into D1 (compartment 4) ────
 d1 = find(strcmp(p.comp_id,'d1'));
 mfns = fieldnames(p.feed_metals);
@@ -897,6 +995,13 @@ else
     fprintf('  Repeating units    : N = 1  (%d membranes)\n', p.nMemCopies);
 end
 fprintf('  Species tracked    : %d (%s)\n', p.nSp, strjoin(p.sp_label, ', '));
+fprintf('  Initial pH         : %s\n', strjoin(arrayfun(@(v) sprintf('%.2f',v), p.pH_initial, 'UniformOutput', false), ' | '));
+fprintf('  Initial [H+] M     : %s\n', strjoin(arrayfun(@(v) sprintf('%.3g',v), p.conc0(:,p.iH)',  'UniformOutput', false), ' | '));
+fprintf('  Initial [OH-] M    : %s\n', strjoin(arrayfun(@(v) sprintf('%.3g',v), p.conc0(:,p.iOH)', 'UniformOutput', false), ' | '));
+if any(p.phDosed_M ~= 0)
+    fprintf('  pH dosing          : %s eq/L net (+acid / -base), counter-ion added\n', ...
+        strjoin(arrayfun(@(v) sprintf('%+.3g',v), p.phDosed_M', 'UniformOutput', false), ' | '));
+end
 inFeed = p.metalIdx(p.conc0(d1, p.metalIdx) > 0);
 if isempty(inFeed)
     fprintf('  Metals in feed     : (none)\n');
@@ -949,6 +1054,18 @@ else
 end
 fprintf('══════════════════════════════════════════════\n\n');
 
+end
+
+
+function v = local_expand_(x, n, name)
+% Scalar -> 1 x n row; vector of length n -> 1 x n row; anything else errors.
+x = x(:)';
+if isscalar(x); x = x * ones(1,n); end
+if numel(x) ~= n
+    error('EDM:hohSize', '%s must be a scalar or have %d entries (one per compartment); got %d.', ...
+        name, n, numel(x));
+end
+v = x;
 end
 
 

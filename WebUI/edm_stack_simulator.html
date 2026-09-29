@@ -327,6 +327,7 @@ canvas.barchart{ width:100%; display:block; }
         <h3>Chemistry options</h3>
         <div class="chem-toggle-row"><input type="checkbox" id="cfgScaling" checked><label for="cfgScaling">Precipitation / scaling chemistry (eq. 12–16)</label></div>
         <div class="chem-toggle-row"><input type="checkbox" id="cfgWaterTransport" checked><label for="cfgWaterTransport">Water transport — osmosis + electro-osmotic drag (eq. 19–20)</label></div>
+        <div class="chem-toggle-row"><input type="checkbox" id="cfgPhDoseCounterion" checked><label for="cfgPhDoseCounterion">Dose acid/base counter-ion (Cl⁻/Na⁺) for a non-neutral Initial pH</label></div>
       </div>
 
       <div class="card">
@@ -700,16 +701,37 @@ function getTssFor(compId){
   const el = document.getElementById('tss_'+compId);
   return el ? (parseFloat(el.value)||0) : 0; // mg/L
 }
+function getPh0For(compId){
+  const el = document.getElementById('ph0_'+compId);
+  const v = el ? parseFloat(el.value) : NaN;
+  return isFinite(v) ? v : 7;
+}
 function getConcFor(compId){
   const def = COMPT_DEFS.find(d=>d.id===compId);
   const out = {};
   let any=false;
   SPECIES.forEach(sp=>{
-    if(sp.id==='H'||sp.id==='OH'){ out[sp.id]=1e-7; return; }
+    if(sp.id==='H'||sp.id==='OH'){ return; } // set below from the Initial pH input
     const el = document.getElementById('conc_'+compId+'_'+sp.id);
     if(el){ out[sp.id]=parseFloat(el.value)||0; any=true; }
     else out[sp.id]=def.conc[sp.id]||0;
   });
+  // Initial H+/OH- from the compartment's Initial pH (mirrors MATLAB's cfg.pH0):
+  // H0 = 10^-pH0, OH0 = Kw/H0 -- these already satisfy H0*OH0 = Kw exactly, so
+  // no further water-equilibrium re-speciation is needed here.
+  const H0 = Math.pow(10, -getPh0For(compId));
+  const OH0 = Kw/H0;
+  out.H = H0; out.OH = OH0;
+  // Acid/base is a dosed reagent, so it brings a counter-ion along: HCl adds
+  // Cl-, NaOH adds Na+ -- keeps a non-neutral start electroneutral instead of
+  // just materializing bare H+/OH- (eq. "pH0" in the MATLAB reference model).
+  const doseEl = document.getElementById('cfgPhDoseCounterion');
+  const dose = doseEl ? doseEl.checked : true;
+  if(dose){
+    const net = H0 - OH0; // eq/L excess acid (+) or base (-)
+    if(net > 1e-9) out.Cl = (out.Cl||0) + net;
+    else if(net < -1e-9) out.Na = (out.Na||0) + (-net);
+  }
   return any?out:null;
 }
 function getMembraneTypes(){
@@ -1156,10 +1178,12 @@ function totalsBySpecies(st){
 /* ═══════════════════════════════════════════════════════════════
    UI — solution tabs (15 species + per-compartment flow/TSS)
    ═══════════════════════════════════════════════════════════════ */
+const phHintUpdaters = [];
 function buildSolutionTabs(){
   const tabsEl = document.getElementById('solTabs');
   const panelsEl = document.getElementById('solPanels');
   tabsEl.innerHTML=''; panelsEl.innerHTML='';
+  phHintUpdaters.length = 0;
   COMPT_DEFS.forEach((def,i)=>{
     const tab = document.createElement('button');
     tab.className='tab'; tab.textContent=shortLabel(def);
@@ -1184,17 +1208,41 @@ function buildSolutionTabs(){
     const panel = document.createElement('div');
     panel.className='tab-panel'; panel.dataset.panel=def.id; panel.dataset.active = i===0?'true':'false';
     SPECIES.forEach(sp=>{
+      if(sp.id==='H'||sp.id==='OH') return; // set via the Initial pH row below instead
       const row = document.createElement('div'); row.className='species-row';
       const dot = document.createElement('span'); dot.className='dot'; dot.style.background=colorVar(sp.color);
       const lbl = document.createElement('span'); lbl.className='lbl'; lbl.textContent=sp.label;
       const z = document.createElement('span'); z.className='z'; z.textContent='z='+(sp.z>0?'+':'')+sp.z;
       const inp = document.createElement('input'); inp.type='number'; inp.step='0.001'; inp.min='0';
       inp.id = 'conc_'+def.id+'_'+sp.id;
-      if(sp.id==='H'||sp.id==='OH'){ inp.value='1e-7'; inp.disabled=true; inp.title='background, pH 7 — not user-editable'; }
-      else inp.value = def.conc[sp.id] || 0;
+      inp.value = def.conc[sp.id] || 0;
       row.append(dot,lbl,z,inp);
       panel.appendChild(row);
     });
+
+    const phRow = document.createElement('div'); phRow.className='vol-row';
+    const phLbl = document.createElement('label'); phLbl.textContent='Initial pH';
+    const phInp = document.createElement('input'); phInp.type='number'; phInp.id='ph0_'+def.id; phInp.value='7'; phInp.min='0'; phInp.max='14'; phInp.step='0.1';
+    const phHint = document.createElement('span'); phHint.className='hint'; phHint.style.margin='0 0 0 4px';
+    const updatePhHint = ()=>{
+      const pH0v = parseFloat(phInp.value);
+      const H0 = Math.pow(10, -(isFinite(pH0v)?pH0v:7));
+      const OH0 = Kw/H0;
+      const doseEl = document.getElementById('cfgPhDoseCounterion');
+      const dose = doseEl ? doseEl.checked : true;
+      const net = H0 - OH0; // eq/L excess acid (+) or base (-)
+      let doseTxt = '';
+      if(dose && Math.abs(net)>1e-9){
+        doseTxt = net>0 ? `, dosing +${(net*1000).toFixed(3)} mM Cl⁻` : `, dosing +${(-net*1000).toFixed(3)} mM Na⁺`;
+      }
+      phHint.textContent = `[H⁺] ${H0.toExponential(2)} M, [OH⁻] ${OH0.toExponential(2)} M${doseTxt}`;
+    };
+    phInp.addEventListener('input', updatePhHint);
+    updatePhHint();
+    phHintUpdaters.push(updatePhHint);
+    phRow.append(phLbl, phInp, phHint);
+    panel.appendChild(phRow);
+
     const volRow = document.createElement('div'); volRow.className='vol-row';
     const volLbl = document.createElement('label'); volLbl.textContent='Loop volume';
     const volInp = document.createElement('input'); volInp.type='number'; volInp.id='vol_'+def.id; volInp.value='250'; volInp.min='10'; volInp.step='10';
@@ -1720,10 +1768,11 @@ document.getElementById('chartTabs').addEventListener('click', (e)=>{
   renderCharts();
 });
 
-['cfgArea','cfgCurrent','cfgDuration','cfgDt','cfgNUnits','cfgScaling','cfgWaterTransport'].forEach(id=>{
+['cfgArea','cfgCurrent','cfgDuration','cfgDt','cfgNUnits','cfgScaling','cfgWaterTransport','cfgPhDoseCounterion'].forEach(id=>{
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', resetSim);
 });
+document.getElementById('cfgPhDoseCounterion').addEventListener('change', ()=> phHintUpdaters.forEach(fn=>fn()));
 for(let k=0;k<5;k++){ const sel=document.getElementById('memType'+k); if(sel) sel.addEventListener('change', resetSim); }
 document.getElementById('cfgNUnits').addEventListener('change', updateMembraneCardUI);
 
