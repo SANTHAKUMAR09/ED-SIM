@@ -181,9 +181,11 @@ input, select, button{
   width: 88px; padding:4px 7px; border-radius:6px; border:1px solid var(--border);
   background:var(--surface-2); color:var(--text); text-align:right; font-family:var(--font-mono); font-size:12px;
 }
-.vol-row{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); }
+.vol-row{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); }
+.vol-row-text{ display:flex; flex-direction:column; gap:2px; min-width:0; }
 .vol-row label{ font-size:11.5px; color:var(--text-muted); }
-.vol-row input{ width:70px; padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); text-align:right; font-family:var(--font-mono); }
+.vol-row-text .hint{ margin:0; }
+.vol-row input{ flex:0 0 auto; width:70px; padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); text-align:right; font-family:var(--font-mono); }
 
 /* ── Right column ───────────────────────────────────────────── */
 .kpi-strip{ display:grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
@@ -1230,9 +1232,10 @@ function buildSolutionTabs(){
     });
 
     const phRow = document.createElement('div'); phRow.className='vol-row';
+    const phText = document.createElement('div'); phText.className='vol-row-text';
     const phLbl = document.createElement('label'); phLbl.textContent='Initial pH';
     const phInp = document.createElement('input'); phInp.type='number'; phInp.id='ph0_'+def.id; phInp.value='7'; phInp.min='0'; phInp.max='14'; phInp.step='0.1';
-    const phHint = document.createElement('span'); phHint.className='hint'; phHint.style.margin='0 0 0 4px';
+    const phHint = document.createElement('span'); phHint.className='hint';
     const updatePhHint = ()=>{
       const pH0v = parseFloat(phInp.value);
       const H0 = Math.pow(10, -(isFinite(pH0v)?pH0v:7));
@@ -1251,28 +1254,35 @@ function buildSolutionTabs(){
     phInp.addEventListener('input', updatePhHint);
     updatePhHint();
     phHintUpdatersForAnionChange.push(updatePhHint);
-    phRow.append(phLbl, phInp, phHint);
+    phText.append(phLbl, phHint);
+    phRow.append(phText, phInp);
     panel.appendChild(phRow);
 
     const volRow = document.createElement('div'); volRow.className='vol-row';
+    const volText = document.createElement('div'); volText.className='vol-row-text';
     const volLbl = document.createElement('label'); volLbl.textContent='Loop volume';
     const volInp = document.createElement('input'); volInp.type='number'; volInp.id='vol_'+def.id; volInp.value='250'; volInp.min='10'; volInp.step='10';
-    const mlLbl = document.createElement('span'); mlLbl.className='hint'; mlLbl.style.margin='0 0 0 4px'; mlLbl.textContent='mL';
-    volRow.append(volLbl, volInp, mlLbl);
+    const mlLbl = document.createElement('span'); mlLbl.className='hint'; mlLbl.textContent='mL';
+    volText.append(volLbl, mlLbl);
+    volRow.append(volText, volInp);
     panel.appendChild(volRow);
 
     const flowRow = document.createElement('div'); flowRow.className='vol-row';
+    const flowText = document.createElement('div'); flowText.className='vol-row-text';
     const flowLbl = document.createElement('label'); flowLbl.textContent='Flow (eq. 18)';
     const flowInp = document.createElement('input'); flowInp.type='number'; flowInp.id='flow_'+def.id; flowInp.value='0'; flowInp.min='0'; flowInp.step='0.1';
-    const flowUnit = document.createElement('span'); flowUnit.className='hint'; flowUnit.style.margin='0 0 0 4px'; flowUnit.textContent='L/min (0 = fixed boundary layer)';
-    flowRow.append(flowLbl, flowInp, flowUnit);
+    const flowUnit = document.createElement('span'); flowUnit.className='hint'; flowUnit.textContent='L/min (0 = fixed boundary layer)';
+    flowText.append(flowLbl, flowUnit);
+    flowRow.append(flowText, flowInp);
     panel.appendChild(flowRow);
 
     const tssRow = document.createElement('div'); tssRow.className='vol-row';
+    const tssText = document.createElement('div'); tssText.className='vol-row-text';
     const tssLbl = document.createElement('label'); tssLbl.textContent='Suspended solids';
     const tssInp = document.createElement('input'); tssInp.type='number'; tssInp.id='tss_'+def.id; tssInp.value='0'; tssInp.min='0'; tssInp.step='10';
-    const tssUnit = document.createElement('span'); tssUnit.className='hint'; tssUnit.style.margin='0 0 0 4px'; tssUnit.textContent='mg/L TSS (eq. 9-11)';
-    tssRow.append(tssLbl, tssInp, tssUnit);
+    const tssUnit = document.createElement('span'); tssUnit.className='hint'; tssUnit.textContent='mg/L TSS (eq. 9-11)';
+    tssText.append(tssLbl, tssUnit);
+    tssRow.append(tssText, tssInp);
     panel.appendChild(tssRow);
 
     panelsEl.appendChild(panel);
