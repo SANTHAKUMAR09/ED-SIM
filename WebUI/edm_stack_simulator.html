@@ -315,12 +315,22 @@ canvas.barchart{ width:100%; display:block; }
       </div>
 
       <div class="card" id="membraneCard">
-        <h3>Membranes (N=1 only)</h3>
-        <div class="mem-row"><span class="mem-label">M1 · Cathode | D2</span><select id="memType0"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
-        <div class="mem-row"><span class="mem-label">M2 · D2 | C2</span><select id="memType1"><option value="AEM" selected>AEM</option><option value="Mono-AEM">Mono-AEM</option><option value="BPM">BPM</option></select></div>
-        <div class="mem-row"><span class="mem-label">M3 · C2 | D1</span><select id="memType2"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
-        <div class="mem-row"><span class="mem-label">M4 · D1 | C1</span><select id="memType3"><option value="AEM" selected>AEM</option><option value="Mono-AEM">Mono-AEM</option><option value="BPM">BPM</option></select></div>
-        <div class="mem-row"><span class="mem-label">M5 · C1 | Anode</span><select id="memType4"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+        <h3 id="membraneCardTitle">Membranes (N=1 only)</h3>
+        <div id="membraneRowsN1">
+          <div class="mem-row"><span class="mem-label">M1 · Cathode | D2</span><select id="memType0"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+          <div class="mem-row"><span class="mem-label">M2 · D2 | C2</span><select id="memType1"><option value="AEM" selected>AEM</option><option value="Mono-AEM">Mono-AEM</option><option value="BPM">BPM</option></select></div>
+          <div class="mem-row"><span class="mem-label">M3 · C2 | D1</span><select id="memType2"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+          <div class="mem-row"><span class="mem-label">M4 · D1 | C1</span><select id="memType3"><option value="AEM" selected>AEM</option><option value="Mono-AEM">Mono-AEM</option><option value="BPM">BPM</option></select></div>
+          <div class="mem-row"><span class="mem-label">M5 · C1 | Anode</span><select id="memType4"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+        </div>
+        <div id="membraneRowsTile" hidden>
+          <div class="mem-row"><span class="mem-label">T1 · Cathode | D2 (terminal)</span><select id="memTileType0"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+          <div class="mem-row"><span class="mem-label">T2 · D2 | C2</span><select id="memTileType1"><option value="AEM" selected>AEM</option><option value="Mono-AEM">Mono-AEM</option><option value="BPM">BPM</option></select></div>
+          <div class="mem-row"><span class="mem-label">T3 · C2 | D1</span><select id="memTileType2"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+          <div class="mem-row"><span class="mem-label">T4 · D1 | C1</span><select id="memTileType3"><option value="AEM" selected>AEM</option><option value="Mono-AEM">Mono-AEM</option><option value="BPM">BPM</option></select></div>
+          <div class="mem-row"><span class="mem-label">T5 · C1 | D2 (next unit)</span><select id="memTileType4"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+          <div class="mem-row"><span class="mem-label">T6 · C1 | Anode (terminal)</span><select id="memTileType5"><option value="CEM" selected>CEM</option><option value="Mono-CEM">Mono-CEM</option><option value="BPM">BPM</option></select></div>
+        </div>
       </div>
 
       <div class="card">
@@ -753,21 +763,32 @@ function getMembraneTypes(){
   }
   return types;
 }
+const DEFAULT_TILE_MEMBRANE_TYPES = ['CEM','AEM','CEM','AEM','CEM','CEM'];
+function getTileMembraneTypes(){
+  const types = [];
+  for(let k=0;k<6;k++){
+    const el = document.getElementById('memTileType'+k);
+    types.push(el ? el.value : DEFAULT_TILE_MEMBRANE_TYPES[k]);
+  }
+  return types;
+}
 
 /* ── build the general membrane table: [left, right, typeCode, mult, typeStr] ──
    typeCode: 1 = cation-conducting (CEM/Mono-CEM), 0 = anion-conducting
-   (AEM/Mono-AEM), 2 = bipolar. N=1 -> 5-row linear chain. N>1 -> the
-   6-row lumped tiling (eq. 21), fixed CEM-AEM-CEM-AEM-CEM-CEM regardless
-   of the 5 selectors (matches the MATLAB reference's own N>1 behavior). */
+   (AEM/Mono-AEM), 2 = bipolar. N=1 -> 5-row linear chain, from the 5
+   N=1 selectors. N>1 -> the 6-row lumped tiling (eq. 21) -- cathode|D2,
+   D2|C2, C2|D1, D1|C1, C1|D2(next unit), C1|anode -- from its own 6
+   selectors (defaults to the standard alternating CEM-AEM-CEM-AEM-CEM-CEM
+   chain, matching the MATLAB reference's own N>1 default). */
 function typeCode(t){ if(t==='BPM') return 2; if(t==='CEM'||t==='Mono-CEM') return 1; return 0; }
-function buildMembraneTable(N, types5){
+function buildMembraneTable(N, types5, tileTypes6){
   // compartment indices: 0 cathode,1 d2,2 c2,3 d1,4 c1,5 anode
   if(N<=1){
     const rows = [];
     for(let k=0;k<5;k++) rows.push({left:k, right:k+1, type:types5[k], code:typeCode(types5[k]), mult:1});
     return rows;
   }
-  const tile = ['CEM','AEM','CEM','AEM','CEM','CEM'];
+  const tile = tileTypes6 || DEFAULT_TILE_MEMBRANE_TYPES;
   const raw = [
     {left:0,right:1,type:tile[0],mult:1},     // cathode|D2 terminal
     {left:1,right:2,type:tile[1],mult:N},      // D2|C2
@@ -797,7 +818,7 @@ function buildInitialState(){
     tssMgL: getTssFor(def.id),
   }));
 
-  const memTable = buildMembraneTable(N, getMembraneTypes());
+  const memTable = buildMembraneTable(N, getMembraneTypes(), getTileMembraneTypes());
   const nMem = memTable.length;
 
   // per-membrane source compartment (fed side, for boundary layer/fouling)
@@ -1352,13 +1373,27 @@ function renderSchematic(st){
   elecSvg += `<rect x="${rightEdge+30}" y="${boxY-10}" width="26" height="${boxH+20}" rx="5" fill="var(--surface-2)" stroke="var(--text-faint)" stroke-width="1.5"/>`;
   elecSvg += `<text x="${rightEdge+43}" y="${boxY+boxH+34}" text-anchor="middle" font-size="10.5" fill="var(--text-muted)">anode +</text>`;
 
-  // The visual schematic always shows the 6 canonical lumped compartments.
-  // For N=1 there's a 1:1 mapping to st.memTable's 5 rows. For N>1, the
-  // extra membrane copies/handoff row aren't separately drawn -- the KPI
-  // strip and snapshot table carry the full N>1 detail instead.
+  // The visual schematic always shows the 6 canonical lumped compartments,
+  // i.e. 5 visible membrane gaps. For N=1 that's a 1:1 mapping to
+  // st.memTable's 5 rows. For N>1 the table has 6 rows -- cathode|D2,
+  // D2|C2, C2|D1, D1|C1, C1|D2(next unit), C1|anode -- and that 5th row
+  // (the internal handoff linking one repeating unit's C1 back to the
+  // next unit's D2) has no single gap of its own in this lumped picture,
+  // so it's skipped here; the KPI strip and snapshot table carry the full
+  // N>1 detail instead.
   let membBars='';
-  const types5 = (st && st.N<=1 && st.memTable.length===5) ? st.memTable.map(m=>m.type) : DEFAULT_MEMBRANE_TYPES;
-  const overLimitFlags = (st && st.N<=1) ? st.overLimitFlags : [];
+  let types5, overLimitFlags;
+  if(st && st.N<=1 && st.memTable.length===5){
+    types5 = st.memTable.map(m=>m.type);
+    overLimitFlags = st.overLimitFlags;
+  } else if(st && st.N>1 && st.memTable.length===6){
+    const rowIdx = [0,1,2,3,5];   // skip row 4, the C1|D2(next unit) handoff
+    types5 = rowIdx.map(i=>st.memTable[i].type);
+    overLimitFlags = rowIdx.map(i=>st.overLimitFlags[i]);
+  } else {
+    types5 = DEFAULT_MEMBRANE_TYPES;
+    overLimitFlags = [];
+  }
   for(let i=0;i<5;i++){
     const mx = membraneX[i];
     const col = memColor(types5[i]);
@@ -1686,11 +1721,10 @@ function addKpi(strip, label, value, cls, sub){
 function updateMembraneCardUI(){
   const nEl = document.getElementById('cfgNUnits');
   const N = nEl ? Math.max(1, Math.round(parseFloat(nEl.value)||1)) : 1;
-  const card = document.getElementById('membraneCard');
-  const h3 = card.querySelector('h3');
-  for(let k=0;k<5;k++){ const sel = document.getElementById('memType'+k); if(sel) sel.disabled = N>1; }
-  h3.textContent = N>1 ? 'Membranes (fixed tiling, N>1)' : 'Membranes (N=1 only)';
-  card.style.opacity = N>1 ? 0.55 : 1;
+  const h3 = document.getElementById('membraneCardTitle');
+  document.getElementById('membraneRowsN1').hidden   = N>1;
+  document.getElementById('membraneRowsTile').hidden = N<=1;
+  h3.textContent = N>1 ? 'Membranes (N='+N+' tiling, 6 rows)' : 'Membranes (N=1 only)';
 }
 
 function resetSim(){
@@ -1795,6 +1829,7 @@ document.getElementById('chartTabs').addEventListener('click', (e)=>{
 });
 document.getElementById('cfgPhAcidAnion').addEventListener('change', ()=> phHintUpdatersForAnionChange.forEach(fn=>fn()));
 for(let k=0;k<5;k++){ const sel=document.getElementById('memType'+k); if(sel) sel.addEventListener('change', resetSim); }
+for(let k=0;k<6;k++){ const sel=document.getElementById('memTileType'+k); if(sel) sel.addEventListener('change', resetSim); }
 document.getElementById('cfgNUnits').addEventListener('change', updateMembraneCardUI);
 
 /* ═══════════════════════════════════════════════════════════════
