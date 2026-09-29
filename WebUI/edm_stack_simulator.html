@@ -325,8 +325,8 @@ canvas.barchart{ width:100%; display:block; }
 
       <div class="card">
         <h3>Chemistry options</h3>
-        <div class="chem-toggle-row"><input type="checkbox" id="cfgScaling" checked><label for="cfgScaling">Precipitation / scaling chemistry (eq. 12–16)</label></div>
-        <div class="chem-toggle-row"><input type="checkbox" id="cfgWaterTransport" checked><label for="cfgWaterTransport">Water transport — osmosis + electro-osmotic drag (eq. 19–20)</label></div>
+        <div class="chem-toggle-row"><input type="checkbox" id="cfgScaling" checked><label for="cfgScaling">Precipitation / scaling chemistry</label></div>
+        <div class="chem-toggle-row"><input type="checkbox" id="cfgWaterTransport" checked><label for="cfgWaterTransport">Water transport — osmosis + electro-osmotic drag</label></div>
         <div class="field-row"><label>Acid anion (pH dosing)</label>
           <select id="cfgPhAcidAnion">
             <option value="Cl">Cl⁻ (HCl)</option>
@@ -1269,7 +1269,7 @@ function buildSolutionTabs(){
 
     const flowRow = document.createElement('div'); flowRow.className='vol-row';
     const flowText = document.createElement('div'); flowText.className='vol-row-text';
-    const flowLbl = document.createElement('label'); flowLbl.textContent='Flow (eq. 18)';
+    const flowLbl = document.createElement('label'); flowLbl.textContent='Flow';
     const flowInp = document.createElement('input'); flowInp.type='number'; flowInp.id='flow_'+def.id; flowInp.value='0'; flowInp.min='0'; flowInp.step='0.1';
     const flowUnit = document.createElement('span'); flowUnit.className='hint'; flowUnit.textContent='L/min (0 = fixed boundary layer)';
     flowText.append(flowLbl, flowUnit);
@@ -1280,7 +1280,7 @@ function buildSolutionTabs(){
     const tssText = document.createElement('div'); tssText.className='vol-row-text';
     const tssLbl = document.createElement('label'); tssLbl.textContent='Suspended solids';
     const tssInp = document.createElement('input'); tssInp.type='number'; tssInp.id='tss_'+def.id; tssInp.value='0'; tssInp.min='0'; tssInp.step='10';
-    const tssUnit = document.createElement('span'); tssUnit.className='hint'; tssUnit.textContent='mg/L TSS (eq. 9-11)';
+    const tssUnit = document.createElement('span'); tssUnit.className='hint'; tssUnit.textContent='mg/L TSS';
     tssText.append(tssLbl, tssUnit);
     tssRow.append(tssText, tssInp);
     panel.appendChild(tssRow);
