@@ -45,9 +45,15 @@ The project went through two design generations:
   of this file.
 - **`MATLAB/EDM_QuadStack_Walkthrough.m`** — beginner-friendly flat script
   (no functions) version of the model, for understanding each module
-  step-by-step. **Out of sync**: still reflects the old 8-equation/2-metal
-  version, not yet updated to match the extended 27-equation model. Known
-  gap, not yet requested to be fixed.
+  step-by-step. **Now in sync** with the extended 27-equation model (as of
+  2026-09-29): all 15 species/10 metals, precipitation/scaling, water
+  transport, fouling, monovalent/bipolar membranes, and the configurable
+  Initial pH feature. Deliberately narrower than the reference file in two
+  places (flagged in its own header): always N=1 (no repeating-unit
+  tiling) and one fixed default configuration (no generic config-override
+  mechanism) — neither is physics, both are reference-model engineering
+  conveniences. Verified via Octave to produce numerically identical
+  results to `EDM_QuadStack_Simulator.m` (see below).
 - **`WebUI/edm_stack_simulator.html`** — self-contained interactive web app
   (vanilla JS, embedded fonts, canvas charts, no external libraries/CDN).
   Full port of `EDM_QuadStack_Simulator.m` — numerically verified identical
@@ -117,6 +123,31 @@ The project went through two design generations:
   (https://arwa-edm-sim.web.app) — confirmed live: acid-anion selector
   present and defaulting to SO4, old dosing checkbox gone, new row
   layout in place, Ni²⁺ KPI still present.
+- Removed the remaining equation-number references from the left-panel
+  labels ("(eq. 12–16)", "(eq. 19–20)", "(eq. 18)", "(eq. 9-11)" under
+  Chemistry options and the Flow/Suspended solids rows).
+- **Full rewrite of `MATLAB/EDM_QuadStack_Walkthrough.m`** to match the
+  27-equation model (previously flagged as out of sync for several
+  sessions — it still reflected the original 8-equation/2-metal
+  version). Now covers all 15 species/10 metals, the Initial-pH feature,
+  monovalent/bipolar membranes, permselectivity/co-ion leakage,
+  concentration polarisation, precipitation/nucleation/dissolution for
+  all 11 solids, suspended-solids fouling, and electro-osmotic-drag +
+  osmosis water transport — one flat, heavily-commented script, same
+  style as before. Deliberately narrower than the reference file in two
+  places (flagged in its own header): always N=1, and one fixed default
+  configuration rather than a generic config-override API — neither is
+  physics. **Installed Octave (`brew install octave`) specifically to
+  verify this** — no MATLAB available in this environment otherwise.
+  Confirmed byte-for-byte-matching results against
+  `EDM_QuadStack_Simulator.m` run the same way (mass balance 100.00%,
+  Co recovered 47.0%, C1 purity 65.2%, current efficiency 26.2%, voltage
+  2.83 V, and all 10 metals' recovery to 3+ significant figures), plus a
+  smoke test of the new Initial-pH/TSS knobs (D1 to pH 2 + 200 mg/L TSS
+  runs cleanly, mass/solids balance still 100.00%). One portability fix
+  found by this verification: MATLAB allows local functions at the end
+  of a script, Octave does not, so the three small helper functions
+  (bisection, areal-deposit-resistance) are inlined in the loop instead.
 
 ## Previous session's changes (2026-09-15)
 
@@ -196,9 +227,6 @@ The project went through two design generations:
 
 ## Open items / not yet done
 
-- `MATLAB/EDM_QuadStack_Walkthrough.m` (beginner flat-script version) is
-  out of sync with the extended 27-equation model — still reflects the old
-  8-equation/2-metal version.
 - No acid-regeneration (bipolar-membrane ED) module in the current design.
 - No train-level integration (this is intentionally independent of ARWA).
 - (Parked v1 model only) Chemistry proxy factors for DTPA/HEDTA/GLDA/none
@@ -211,7 +239,7 @@ The project went through two design generations:
 % Full extended quad-stack reference model
 R = EDM_QuadStack_Simulator();   % see file header for options/signature
 
-% Beginner walkthrough (currently out of sync — old 8-eq model)
+% Beginner walkthrough (now in sync with the reference model, see above)
 run('MATLAB/EDM_QuadStack_Walkthrough.m')
 
 % Parked first-generation model
@@ -219,6 +247,13 @@ R = AMD_Electrodialysis_MetalRecovery();
 run('scripts/run_paper1_scale_match.m')
 run('scripts/run_chelator_pH_secondaryfeed_sensitivity.m')
 ```
+
+Octave (`brew install octave`) works for both `.m` files above and is
+useful as a free sanity-check runner when MATLAB itself isn't at hand —
+just note `plotDashboard_EDM`'s use of `tiledlayout` isn't supported on
+older Octave, so the numeric report/warnings print fine but the dashboard
+figure itself will error; the walkthrough's plain `subplot`-based plots
+don't hit that issue.
 
 ```bash
 # Web app: open locally
