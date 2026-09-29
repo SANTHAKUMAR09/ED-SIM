@@ -68,9 +68,12 @@ The project went through two design generations:
   current-efficiency / mass-balance / voltage / scaling charts, topology
   safety badges (flags trace metal reaching cathode rinse or Cl⁻ reaching
   anode rinse — a real, small-magnitude consequence of co-ion leakage
-  physics, not a bug), and a per-compartment **Initial pH** input (with
+  physics, not a bug), a per-compartment **Initial pH** input (with
   a selectable acid anion for the counter-ion it doses — Cl⁻/HCl or
-  SO4²⁻/H2SO4, default SO4²⁻) mirroring the MATLAB model's `cfg.pH0`.
+  SO4²⁻/H2SO4, default SO4²⁻) mirroring the MATLAB model's `cfg.pH0`,
+  and a full 6-selector membrane panel for N>1 repeating-unit tiling
+  (not just the 5 N=1 selectors — see the corrected D2-start topology's
+  cathode|D2 / D2|C2 / C2|D1 / D1|C1 / C1|D2-next-unit / C1|anode rows).
 - **Live deployment**: **https://arwa-edm-sim.web.app** (Firebase Hosting,
   multi-site target `arwa` under GCP project `edm-sim-hosting`, free
   `.web.app` subdomain — no custom domain purchased). Deploy source is
@@ -148,6 +151,27 @@ The project went through two design generations:
   found by this verification: MATLAB allows local functions at the end
   of a script, Octave does not, so the three small helper functions
   (bisection, areal-deposit-resistance) are inlined in the loop instead.
+- **Fixed N>1 membrane selection** (user-reported via a live test with
+  screenshots): setting M1 to Mono-CEM at N=1 then raising Repeating
+  units to N=2 silently reverted it to plain CEM. Root cause: N>1 tiles
+  into a 6-row membrane table (cathode|D2, D2|C2, C2|D1, D1|C1, C1|D2 of
+  the *next* unit, C1|anode — the "next unit" handoff is why it can't be
+  a simple 5-slot linear chain), and the web app only ever exposed the 5
+  N=1 selectors, always building the N>1 tile from a hardcoded default
+  array. Added a second 6-selector panel (T1–T6) shown only when N>1 so
+  every tiling row is actually choosable, matching what
+  `EDM_QuadStack_Simulator.m` already supports via a 6-entry
+  `membrane_types`. This also surfaced a second, independent display bug:
+  the schematic's membrane badges always showed hardcoded defaults for
+  N>1 regardless of selection (pre-existing, not caused by this feature) —
+  fixed by mapping the 6-row tile table onto the 5 visible gaps (the
+  internal C1|D2-next-unit row has no single gap in the lumped
+  6-compartment picture, so it's the one row not shown visually).
+  Verified in-browser: N=2 + T1=Mono-CEM now shows "Mono-CEM" in the
+  schematic; switching back to N=1 restores the 5-selector panel; a run
+  completes with mass balance at 100.00%.
+- Deployed all of the above (walkthrough rewrite is MATLAB-only, not
+  deployed) to the live Firebase site.
 
 ## Previous session's changes (2026-09-15)
 
