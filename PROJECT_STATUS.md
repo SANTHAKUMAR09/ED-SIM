@@ -5,7 +5,7 @@ session checkpoint ("save this session") so any machine can `git pull` and
 resume with full context — this repo has no dependency on ARWA or its
 memory system.
 
-**Last updated:** 2026-09-15.
+**Last updated:** 2026-09-29.
 
 ## Overview
 
@@ -36,9 +36,13 @@ The project went through two design generations:
   dissolution), suspended-solids/membrane fouling, Lévêque-correlation
   flow→boundary-layer coupling, electro-osmotic drag + osmosis (water
   transport), N-repeating-unit stack tiling, monovalent-selective and
-  bipolar membrane branches, permselectivity/co-ion leakage, and
-  concentration-polarization film resistance. Source of truth for all
-  physics — the web app is a verified 1:1 port of this file.
+  bipolar membrane branches, permselectivity/co-ion leakage,
+  concentration-polarization film resistance, and a configurable initial
+  pH per compartment (`cfg.pH0`/`H0_M`/`OH0_M`) with automatic acid/base
+  counter-ion dosing (`PH_ACID_ANION`, default `'SO4'` for H2SO4 — any
+  species in `sp_id` works, it's not tied to one specific acid).
+  Source of truth for all physics — the web app is a verified 1:1 port
+  of this file.
 - **`MATLAB/EDM_QuadStack_Walkthrough.m`** — beginner-friendly flat script
   (no functions) version of the model, for understanding each module
   step-by-step. **Out of sync**: still reflects the old 8-equation/2-metal
@@ -58,7 +62,9 @@ The project went through two design generations:
   current-efficiency / mass-balance / voltage / scaling charts, topology
   safety badges (flags trace metal reaching cathode rinse or Cl⁻ reaching
   anode rinse — a real, small-magnitude consequence of co-ion leakage
-  physics, not a bug).
+  physics, not a bug), and a per-compartment **Initial pH** input (with
+  a selectable acid anion for the counter-ion it doses — Cl⁻/HCl or
+  SO4²⁻/H2SO4, default SO4²⁻) mirroring the MATLAB model's `cfg.pH0`.
 - **Live deployment**: **https://arwa-edm-sim.web.app** (Firebase Hosting,
   multi-site target `arwa` under GCP project `edm-sim-hosting`, free
   `.web.app` subdomain — no custom domain purchased). Deploy source is
@@ -74,7 +80,45 @@ The project went through two design generations:
   Left in place for reference; not part of the active design. See
   `v1-cem-cation-model` git tag for the state at which this was parked.
 
-## Latest session's changes (2026-09-15)
+## Latest session's changes (2026-09-29)
+
+- Merged `EDM_QuadStack_Simulator13.m` (updated on another machine) into
+  `MATLAB/EDM_QuadStack_Simulator.m`. The real change: a configurable
+  **initial pH per compartment** (`cfg.pH0`, or `cfg.H0_M`/`cfg.OH0_M`
+  directly) instead of a hard-wired pH 7 everywhere, with automatic
+  acid/base counter-ion dosing (`PH_DOSE_COUNTERION`, default on) so a
+  non-neutral start stays electroneutral, plus new dashboard reporting
+  of initial pH/[H+]/[OH-]/dosing per compartment. Also restored this
+  repo's accurate 27-equation header comment — the incoming file's
+  header had reverted to a stale "same 8 equations as the web tool"
+  template that no longer matched the actual (untouched) 27-equation
+  code body.
+- Ported the same initial-pH feature to the web app: each compartment's
+  Solutions tab gets an **Initial pH** input with a live hint showing
+  the resulting [H+]/[OH-] and any counter-ion dosed.
+- Fixed a modeling gap the user caught: the counter-ion dosing was
+  hardcoded to Cl⁻ (i.e. assumed HCl), but the user's actual acid is
+  H2SO4. Made the acid anion **user-selectable** (Cl⁻/HCl or SO4²⁻/H2SO4)
+  in both the web app (dropdown, default SO4²⁻) and MATLAB
+  (`PH_ACID_ANION`, default changed from `'Cl'` to `'SO4'`) — and fixed
+  the stoichiometry to divide by the anion's charge, since a divalent
+  anion like SO4²⁻ needs half the moles Cl⁻ would for the same eq/L of
+  acid. Removed the "dose counter-ion" on/off checkbox from the web UI
+  (it was always checked, no real use case for turning it off) — dosing
+  stays permanently on in both files.
+- Removed more explanatory hint text per explicit user request: under
+  Repeating units (N) and under the Membranes card.
+- Reorganized the Solutions panel's per-compartment rows (Initial pH,
+  Loop volume, Flow, Suspended solids): label + hint now group together
+  on the left, with the input consistently pinned to the end of the row
+  (previously the input sat sandwiched between the label and a
+  variable-length hint with uneven spacing).
+- Deployed all of the above to the live Firebase site
+  (https://arwa-edm-sim.web.app) — confirmed live: acid-anion selector
+  present and defaulting to SO4, old dosing checkbox gone, new row
+  layout in place, Ni²⁺ KPI still present.
+
+## Previous session's changes (2026-09-15)
 
 - Stripped all explanatory text out of the Model Equations section: the
   intro paragraph under the "Model equations" heading, all 22 per-card
@@ -92,7 +136,7 @@ The project went through two design generations:
   (0 `eq-desc`/`eq-intro`/`footer-note` nodes, 22 eq-cards intact, Ni KPI
   present in the strip).
 
-## Previous session's changes (2026-09-09)
+## Earlier session's changes (2026-09-09)
 
 - Ported the full extended MATLAB model (27 equations / 15 species / 10
   metals, up from the original 8 equations / 2 metals) into the web app —
